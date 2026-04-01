@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+body {
+  margin: 0;
+  background: #020617;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
