@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+const pdfParse = require('pdf-parse');
 const Anthropic = require('@anthropic-ai/sdk');
 const { SCHEMA_TEMPLATE, validateAndMerge } = require('../../shared/schema');
 
