@@ -49,7 +49,7 @@ Exchange: TASI (Tadawul)`;
   const stream = client.messages.stream({
     model: 'claude-sonnet-4-5',
     max_tokens: 8000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+    tools: [{ type: 'web_search_20250305' }],
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   });
