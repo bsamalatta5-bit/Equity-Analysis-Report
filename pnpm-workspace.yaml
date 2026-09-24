@@ -1,0 +1,6 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tools/*"
+  - "tests/integration"
+  - "tests/isolation"

@@ -3,3 +3,16 @@ dist/
 .env
 *.pptx
 /tmp/
+
+# voice-receptionist platform
+.turbo/
+coverage/
+.next/
+build/
+*.tsbuildinfo
+prisma/generated/
+.env.local
+playwright-report/
+test-results/
+.pnpm-store/
+dump.rdb

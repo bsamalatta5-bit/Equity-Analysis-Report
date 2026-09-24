@@ -1,0 +1,346 @@
+openapi: 3.0.3
+info:
+  title: Voice Receptionist API
+  version: 0.1.0
+  description: >
+    Covers the surface built in this session (Modules 1-4: platform
+    foundation, authentication/authorization, and the scheduling domain).
+    Call/knowledge/escalation/usage/retention endpoints (Modules 5-11) do
+    not exist yet — see docs/adr/dialect-feasibility-verdict.md — and are
+    not documented here.
+servers:
+  - url: http://localhost:3001
+    description: Local development (apps/api)
+
+security:
+  - sessionCookie: []
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-session
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_FAILED
+        message:
+          type: string
+        correlationId:
+          type: string
+        details:
+          type: object
+    Principal:
+      type: object
+      description: Never returned directly; shown here for reference to the A3.7 role model.
+      properties:
+        role:
+          type: string
+          enum: [tenant_owner, location_manager, front_desk_user, platform_operator]
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: OK }
+
+  /health/ready:
+    get:
+      summary: Readiness probe (DB + Redis reachable)
+      security: []
+      responses:
+        "200": { description: OK }
+        "503": { description: A dependency is unreachable }
+
+  /auth/login:
+    post:
+      summary: Password login. May return a session directly, or a TOTP challenge/enrollment step (A3.4).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: session issued, or a challenge to complete next
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [session, totp_required, totp_enrollment_required] }
+                  challengeToken: { type: string }
+        "401": { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { description: Rate limited (A3.5) }
+
+  /auth/totp/verify:
+    post:
+      summary: Completes login with a TOTP code (A3.4).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeToken, code]
+              properties:
+                challengeToken: { type: string }
+                code: { type: string, pattern: "^\\d{6}$" }
+      responses:
+        "200": { description: session issued }
+        "401": { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/totp/enroll/start:
+    post:
+      summary: Begins TOTP enrollment for a user who has none yet.
+      security: []
+      responses:
+        "200":
+          description: secret + otpauth URI for a QR code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauthUri: { type: string }
+
+  /auth/totp/enroll/confirm:
+    post:
+      summary: Confirms TOTP enrollment and issues a session.
+      security: []
+      responses:
+        "200": { description: session issued }
+
+  /auth/refresh:
+    post:
+      summary: Rotates the refresh token and issues a new session (A3.3).
+      security: []
+      responses:
+        "200": { description: session issued }
+        "401": { description: refresh token invalid, expired, or reused (family revoked) }
+
+  /auth/logout:
+    post:
+      summary: Revokes the current session.
+      security: []
+      responses:
+        "200": { description: OK }
+
+  /auth/password:
+    patch:
+      summary: Changes the authenticated user's password.
+      responses:
+        "200": { description: OK }
+        "401": { description: current password incorrect }
+
+  /tenants/{tenantId}:
+    get:
+      summary: Get tenant profile (A3.7 - Tenant profile R).
+      parameters: [{ $ref: "#/components/parameters/tenantId" }]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    patch:
+      summary: Update tenant profile (tenant_owner only).
+      parameters: [{ $ref: "#/components/parameters/tenantId" }]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /tenants/{tenantId}/users:
+    get:
+      summary: List tenant users (tenant_owner full; platform_operator identity-only).
+      parameters: [{ $ref: "#/components/parameters/tenantId" }]
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create a tenant user (tenant_owner only).
+      parameters: [{ $ref: "#/components/parameters/tenantId" }]
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/users/{userId}:
+    patch:
+      summary: Update a tenant user (tenant_owner only).
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Disable a tenant user (tenant_owner only).
+      responses:
+        "200": { description: OK }
+
+  /tenants/{tenantId}/locations:
+    get:
+      summary: List locations, scoped to assigned locations for location_manager/front_desk_user.
+      parameters: [{ $ref: "#/components/parameters/tenantId" }]
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create a location (tenant_owner only).
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}:
+    get:
+      summary: Get a location.
+      responses:
+        "200": { description: OK }
+        "404": { description: Not visible under RLS for this tenant (A2.4) }
+
+  /tenants/{tenantId}/phone-numbers:
+    get:
+      summary: List phone numbers (platform_operator sees status only).
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Provision a phone number (tenant_owner only).
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}/services:
+    get:
+      summary: List services at a location.
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create a service (tenant_owner, location_manager).
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}/staff:
+    get:
+      summary: List staff members at a location.
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create a staff member (tenant_owner, location_manager).
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}/staff/{staffMemberId}/availability-rules:
+    get:
+      summary: List a staff member's recurring availability rules.
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create an availability rule.
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}/staff/{staffMemberId}/blocked-periods:
+    post:
+      summary: Block a staff member's time period (e.g. vacation).
+      responses:
+        "201": { description: Created }
+
+  /tenants/{tenantId}/locations/{locationId}/open-slots:
+    get:
+      summary: >
+        Open slot query (A4.1/A4.2): returns slots honoring availability
+        rules, excluding blocked periods and existing non-cancelled
+        appointments, respecting the location's timezone.
+      parameters:
+        - { $ref: "#/components/parameters/tenantId" }
+        - name: locationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: serviceId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: staffMemberId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: fromDate
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: toDate
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    staffMemberId: { type: string, format: uuid }
+                    startAt: { type: string, format: date-time }
+                    endAt: { type: string, format: date-time }
+
+  /tenants/{tenantId}/appointments:
+    get:
+      summary: List appointments for a location.
+      responses:
+        "200": { description: OK }
+    post:
+      summary: >
+        Book an appointment (A7.1: a voice_call source must carry
+        callerConfirmed: true). Concurrency-safe via the database
+        exclusion constraint (A4.3) — a contended slot returns
+        SLOT_CONTENTION, never a silent double-booking.
+      responses:
+        "201": { description: Created }
+        "409":
+          description: SLOT_CONTENTION — the slot was booked by a concurrent request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /tenants/{tenantId}/appointments/{appointmentId}/reschedule:
+    patch:
+      summary: Reschedule an appointment; may return SLOT_CONTENTION (A7.3).
+      responses:
+        "200": { description: OK }
+        "409": { description: SLOT_CONTENTION }
+
+  /tenants/{tenantId}/appointments/{appointmentId}/status:
+    patch:
+      summary: >
+        Transition an appointment's status. Every transition writes an
+        audit log entry naming the actor, principal type, and source
+        (A4.4).
+      responses:
+        "200": { description: OK }
+        "409": { description: Invalid status transition }
+
+  /tenants/{tenantId}/audit-log:
+    get:
+      summary: List audit log entries (tenant_owner, platform_operator).
+      responses:
+        "200": { description: OK }
+
+components:
+  parameters:
+    tenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Forbidden:
+      description: A3.6 - forbidden operation, no resource data included in the body
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }

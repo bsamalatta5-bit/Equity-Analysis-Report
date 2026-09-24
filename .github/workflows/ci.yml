@@ -1,0 +1,78 @@
+name: CI
+
+# Scope note: this workflow currently gates the parts of the platform built
+# so far (Modules 1-4: foundation, auth, scheduling domain, and the dialect
+# feasibility probe harness). Semgrep, Trivy, npm audit, and the staging/
+# production deploy workflows are added in Module 13 (Delivery
+# Infrastructure) per docs/adr/version-substitutions.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: voice_app
+          POSTGRES_PASSWORD: local-dev-only
+          POSTGRES_DB: voice_receptionist
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voice_app -d voice_receptionist"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://voice_app:local-dev-only@localhost:5432/voice_receptionist
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.11.0"
+
+      - name: Enable corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Apply migrations
+        run: pnpm --filter api exec prisma migrate deploy
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Isolation tests
+        run: pnpm test:isolation
+
+      - name: Build
+        run: pnpm build

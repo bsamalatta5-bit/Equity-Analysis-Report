@@ -1,0 +1,38 @@
+{
+  "corpusName": "synthetic-example-v0",
+  "isSyntheticPlaceholder": true,
+  "utterances": [
+    {
+      "id": "u001",
+      "dialect": "najdi",
+      "speakerGender": "female",
+      "speakerAgeBracket": "30-44",
+      "audioPath": "PLACEHOLDER-NO-AUDIO-RECORDED-u001.wav",
+      "referenceTranscript": "أبغى أحجز موعد عند الدكتورة يوم الأحد الجاي"
+    },
+    {
+      "id": "u002",
+      "dialect": "hijazi",
+      "speakerGender": "male",
+      "speakerAgeBracket": "18-29",
+      "audioPath": "PLACEHOLDER-NO-AUDIO-RECORDED-u002.wav",
+      "referenceTranscript": "ممكن أعرف مواعيد العيادة يوم الخميس"
+    },
+    {
+      "id": "u003",
+      "dialect": "najdi",
+      "speakerGender": "male",
+      "speakerAgeBracket": "45-59",
+      "audioPath": "PLACEHOLDER-NO-AUDIO-RECORDED-u003.wav",
+      "referenceTranscript": "أبي ألغي الموعد اللي عندي بكرة"
+    },
+    {
+      "id": "u004",
+      "dialect": "hijazi",
+      "speakerGender": "female",
+      "speakerAgeBracket": "60+",
+      "audioPath": "PLACEHOLDER-NO-AUDIO-RECORDED-u004.wav",
+      "referenceTranscript": "كم سعر تنظيف الأسنان عندكم"
+    }
+  ]
+}

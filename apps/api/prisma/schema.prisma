@@ -1,0 +1,486 @@
+// Prisma schema for the voice receptionist platform (Section 5).
+//
+// Connection strategy: this `datasource.url` is read by the Prisma CLI
+// (`prisma generate`, `prisma migrate *`, `prisma db seed`) and therefore
+// must point at a role with DDL rights — DATABASE_MIGRATOR_URL, a
+// superuser locally. The running API process never uses this value; its
+// PrismaService (apps/api/src/common/prisma.service.ts) always overrides
+// `datasources.db.url` to DATABASE_URL, the least-privileged `voice_app`
+// role, so that row-level security (5.1c) is actually enforced at runtime.
+// Postgres superusers bypass RLS unconditionally, which is exactly why the
+// two roles must never be the same one.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_MIGRATOR_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum AppointmentSource {
+  voice_call
+  dashboard
+  import
+}
+
+enum CallDisposition {
+  contained
+  escalated
+  abandoned
+  message_captured
+  emergency_transfer
+  provider_failure
+}
+
+enum CallDirection {
+  inbound
+}
+
+enum UserRole {
+  tenant_owner
+  location_manager
+  front_desk_user
+  platform_operator
+}
+
+enum CallTurnSpeaker {
+  caller
+  assistant
+}
+
+enum KnowledgeLanguage {
+  ar
+  en
+}
+
+enum TenantStatus {
+  active
+  suspended
+  offboarded
+}
+
+enum UserStatus {
+  active
+  disabled
+  pending_totp_enrollment
+}
+
+enum PhoneNumberStatus {
+  provisioning
+  active
+  released
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  cancelled
+}
+
+enum EscalationTriggerType {
+  explicit_request
+  low_confidence
+  emergency
+  provider_failure
+  silence_timeout
+}
+
+enum ActorPrincipalType {
+  human_user
+  voice_gateway
+  retention_job
+  telephony_partner
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// Row-level security: apps/api/prisma/migrations/20240102000100_row_level_security
+/// policy predicate: id = current_setting('app.current_tenant_id')::uuid
+model Tenant {
+  id                     String       @id @default(uuid()) @db.Uuid
+  legalName               String
+  commercialRegistration String
+  status                 TenantStatus @default(active)
+  planCode               String
+  createdAt              DateTime     @default(now()) @db.Timestamptz
+
+  locations     Location[]
+  phoneNumbers  PhoneNumber[]
+  users         User[]
+  contacts      Contact[]
+  calls         Call[]
+  knowledgeItems KnowledgeItem[]
+  auditLogs     AuditLog[]
+  subscriptions Subscription[]
+  usageRecords  UsageRecord[]
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model Location {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  addressLine String
+  timezone    String
+  active      Boolean  @default(true)
+
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  phoneNumbers  PhoneNumber[]
+  services      Service[]
+  staffMembers  StaffMember[]
+  appointments  Appointment[]
+  escalationRules EscalationRule[]
+  calls         Call[]
+
+  @@index([tenantId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model PhoneNumber {
+  id                 String            @id @default(uuid()) @db.Uuid
+  tenantId           String            @db.Uuid
+  locationId         String            @db.Uuid
+  e164Number         String            @unique
+  providerReference  String
+  status             PhoneNumberStatus @default(provisioning)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@index([tenantId])
+  @@index([locationId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  tenantId        String     @db.Uuid
+  email           String     @unique
+  passwordHash    String
+  role            UserRole
+  status          UserStatus @default(pending_totp_enrollment)
+  totpSecret      String?
+  totpEnrolledAt  DateTime? @db.Timestamptz
+  failedAttempts  Int        @default(0)
+  lockedUntil     DateTime? @db.Timestamptz
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  assignedLocations UserLocation[]
+  refreshTokenFamilies RefreshTokenFamily[]
+  auditLogs        AuditLog[]
+
+  @@index([tenantId])
+}
+
+/// Join table: which locations a location_manager / front_desk_user is scoped to.
+/// Not part of Section 5's entity list verbatim, but required to implement
+/// the "(scoped)" cells of the A3.7 authorization matrix, which otherwise
+/// has no data to scope against. Carries no independent tenantId; policy
+/// joins through User.
+model UserLocation {
+  userId     String @db.Uuid
+  locationId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, locationId])
+  @@index([locationId])
+}
+
+/// Refresh token rotation family (A3.3). Reuse of any consumed token in a
+/// family revokes the whole family. Token values are stored hashed, never
+/// in plaintext, and are treated as sensitive by the logger redaction layer
+/// (key name matches the `token` pattern).
+model RefreshTokenFamily {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  revokedAt   DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  user   User            @relation(fields: [userId], references: [id])
+  tokens RefreshToken[]
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  familyId    String    @db.Uuid
+  tokenHash   String    @unique
+  issuedAt    DateTime  @default(now()) @db.Timestamptz
+  expiresAt   DateTime @db.Timestamptz
+  consumedAt  DateTime? @db.Timestamptz
+
+  family RefreshTokenFamily @relation(fields: [familyId], references: [id])
+
+  @@index([familyId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Location.
+model StaffMember {
+  id          String  @id @default(uuid()) @db.Uuid
+  locationId  String  @db.Uuid
+  displayName String
+  active      Boolean @default(true)
+
+  location           Location            @relation(fields: [locationId], references: [id])
+  availabilityRules  AvailabilityRule[]
+  blockedPeriods     BlockedPeriod[]
+  appointments       Appointment[]
+
+  @@index([locationId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Location.
+model Service {
+  id              String  @id @default(uuid()) @db.Uuid
+  locationId      String  @db.Uuid
+  nameAr          String
+  nameEn          String
+  durationMinutes Int
+  statedPrice     Decimal @db.Decimal(10, 2)
+  active          Boolean @default(true)
+
+  location     Location      @relation(fields: [locationId], references: [id])
+  appointments Appointment[]
+
+  @@index([locationId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through StaffMember -> Location.
+model AvailabilityRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  staffMemberId String    @db.Uuid
+  weekday       Int
+  startTime     String
+  endTime       String
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id])
+
+  @@index([staffMemberId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through StaffMember -> Location.
+model BlockedPeriod {
+  id            String   @id @default(uuid()) @db.Uuid
+  staffMemberId String   @db.Uuid
+  startAt       DateTime @db.Timestamptz
+  endAt         DateTime @db.Timestamptz
+  reason        String
+
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id])
+
+  @@index([staffMemberId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model Contact {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  phoneE164         String
+  displayName       String?
+  preferredLanguage KnowledgeLanguage?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+  calls        Call[]
+
+  @@unique([tenantId, phoneE164])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling (Module 4)
+// ---------------------------------------------------------------------------
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Location.
+/// Double-booking exclusion constraint: 20240101000200_appointment_no_overlap.
+model Appointment {
+  id            String            @id @default(uuid()) @db.Uuid
+  locationId    String            @db.Uuid
+  staffMemberId String            @db.Uuid
+  serviceId     String            @db.Uuid
+  contactId     String            @db.Uuid
+  startAt       DateTime @db.Timestamptz
+  endAt         DateTime @db.Timestamptz
+  status        AppointmentStatus @default(pending)
+  source        AppointmentSource
+  callId        String?           @db.Uuid
+
+  location    Location    @relation(fields: [locationId], references: [id])
+  staffMember StaffMember @relation(fields: [staffMemberId], references: [id])
+  service     Service     @relation(fields: [serviceId], references: [id])
+  contact     Contact     @relation(fields: [contactId], references: [id])
+  call        Call?       @relation(fields: [callId], references: [id])
+
+  // Composite index (Section 5.1e): expressed natively as @@index below,
+  // created by the baseline migration 20240101000100_init.
+  @@index([locationId, startAt])
+  @@index([staffMemberId])
+  @@index([contactId])
+}
+
+// ---------------------------------------------------------------------------
+// Calls, transcripts, knowledge (schema only in this build phase — the
+// voice gateway that populates these tables is Module 5+, out of scope for
+// this session; see docs/adr/version-substitutions.md)
+// ---------------------------------------------------------------------------
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model Call {
+  id                  String          @id @default(uuid()) @db.Uuid
+  tenantId            String          @db.Uuid
+  locationId          String          @db.Uuid
+  contactId           String?         @db.Uuid
+  direction           CallDirection   @default(inbound)
+  startedAt           DateTime @db.Timestamptz
+  endedAt             DateTime? @db.Timestamptz
+  disposition         CallDisposition?
+  containmentFlag     Boolean         @default(false)
+  recordingObjectKey  String?
+  recordingExpiresAt  DateTime? @db.Timestamptz
+
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  location      Location        @relation(fields: [locationId], references: [id])
+  contact       Contact?        @relation(fields: [contactId], references: [id])
+  turns         CallTurn[]
+  appointments  Appointment[]
+  consentRecord ConsentRecord?
+
+  // Composite index (Section 5.1e): expressed natively as @@index below,
+  // created by the baseline migration 20240101000100_init.
+  @@index([tenantId, startedAt(sort: Desc)])
+  @@index([locationId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Call.
+model CallTurn {
+  id                  String          @id @default(uuid()) @db.Uuid
+  callId              String          @db.Uuid
+  sequence            Int
+  speaker             CallTurnSpeaker
+  transcriptText      String
+  detectedLanguage    KnowledgeLanguage?
+  languageConfidence  Float?
+  intent              String?
+  confidence          Float?
+  latencyMs           Int?
+
+  call Call @relation(fields: [callId], references: [id])
+
+  @@unique([callId, sequence])
+  @@index([callId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+/// pgvector extension and similarity index: 20240101000300_knowledge_vector_index.
+model KnowledgeItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  tenantId     String            @db.Uuid
+  questionText String
+  answerText   String
+  language     KnowledgeLanguage
+  embedding    Unsupported("vector(1536)")
+  active       Boolean           @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Location.
+model EscalationRule {
+  id              String                @id @default(uuid()) @db.Uuid
+  locationId      String                @db.Uuid
+  triggerType     EscalationTriggerType
+  targetPhoneE164 String
+  activeHours     Json
+
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@index([locationId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, policy joins through Call.
+model ConsentRecord {
+  id                   String    @id @default(uuid()) @db.Uuid
+  callId               String    @unique @db.Uuid
+  announcementPlayedAt DateTime? @db.Timestamptz
+  recordingConsented   Boolean   @default(false)
+
+  call Call @relation(fields: [callId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Audit, usage, billing
+// ---------------------------------------------------------------------------
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+/// Immutability grant: 20240101000400_audit_log_immutability revokes
+/// UPDATE and DELETE on this table from the voice_app application role.
+model AuditLog {
+  id                 String             @id @default(uuid()) @db.Uuid
+  tenantId           String             @db.Uuid
+  actorUserId        String?            @db.Uuid
+  actorPrincipalType ActorPrincipalType
+  action             String
+  entityType         String
+  entityId           String
+  occurredAt         DateTime           @default(now()) @db.Timestamptz
+  ipAddress          String?
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  actorUser User?  @relation(fields: [actorUserId], references: [id])
+
+  @@index([tenantId, occurredAt(sort: Desc)])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model Subscription {
+  id              String             @id @default(uuid()) @db.Uuid
+  tenantId        String             @db.Uuid
+  planCode        String
+  includedMinutes Int
+  periodStart     DateTime @db.Timestamptz
+  periodEnd       DateTime @db.Timestamptz
+  status          SubscriptionStatus @default(active)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+/// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+model UsageRecord {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  periodStart      DateTime @db.Timestamptz
+  billableMinutes  Int      @default(0)
+  overageMinutes   Int      @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, periodStart])
+}

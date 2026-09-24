@@ -1,0 +1,31 @@
+{
+  "name": "voice-receptionist",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Arabic voice AI receptionist platform for appointment-based service businesses",
+  "engines": {
+    "node": "22.11.0",
+    "pnpm": "9.12.0"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "lint": "pnpm -r --if-present run lint",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test:unit": "pnpm -r --if-present run test:unit",
+    "test:integration": "pnpm --filter @voice-receptionist/tests-integration run test",
+    "test:isolation": "pnpm --filter @voice-receptionist/tests-isolation run test",
+    "test:e2e": "pnpm --filter dashboard exec playwright test",
+    "build": "pnpm -r --if-present run build",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "@typescript-eslint/eslint-plugin": "8.11.0",
+    "@typescript-eslint/parser": "8.11.0",
+    "eslint": "8.57.1",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.3.3",
+    "typescript": "5.6.3"
+  }
+}
