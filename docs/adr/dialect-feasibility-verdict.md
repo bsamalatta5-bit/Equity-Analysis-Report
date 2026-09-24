@@ -86,11 +86,48 @@ this.
 Because this gate is unresolved, `SPEECH_RECOGNITION_PROVIDER`,
 `SPEECH_SYNTHESIS_PROVIDER`, `LANGUAGE_MODEL_PROVIDER`, and
 `TELEPHONY_PROVIDER` in `.env.example` are all set to `fixture` — a
-placeholder value, not a real vendor. Module 6's provider interfaces
-(`SpeechRecognitionProvider`, `SpeechSynthesisProvider`,
-`LanguageModelProvider`, `TelephonyProvider`) and Modules 5–11 (the voice
-gateway, dialogue state machine, knowledge retrieval, safety classifier,
-recording pipeline, and usage controls that depend on them) were out of
-scope for this session by explicit agreement and are not built. This is
-consistent with the halt gate: there is nothing to select a provider
-adapter *for* yet.
+placeholder value, not a real vendor. `provider-factory.ts`
+(`apps/voice-gateway/src/providers/provider-factory.ts`) throws for any
+other value, by design: there is no real adapter to select yet, and it
+should fail loudly rather than silently falling back to a fixture in an
+environment that thinks it configured something real.
+
+**What was subsequently built anyway (Module 6, then Module 5's core):**
+the four provider interfaces and their fixture-backed adapters, plus the
+parts of the voice gateway that do not depend on a selected provider at
+all — telephony webhook verification (A5.1: real HMAC-SHA256 + replay
+window + nonce logic, not a stub, since that scheme is the spec's own
+vendor-agnostic contract), tenant resolution from the called number
+(A3.8), Call/ConsentRecord creation before any assistant utterance (A5.3),
+and Redis-backed session state that survives a process restart (A5.5).
+None of this required resolving the halt gate, because none of it touches
+real audio or a real speech/telephony vendor.
+
+**What remains genuinely blocked:** real-time bidirectional audio
+streaming and its latency/language-detection accuracy claims (A5.2, A5.6,
+A5.7), the dialogue state machine (Module 7), knowledge retrieval (Module
+8), the safety classifier (Module 9), and everything else that needs an
+actual speech recognition, synthesis, or language model call to mean
+anything. `apps/voice-gateway/src/main.ts`'s WebSocket endpoint accepts
+and tracks connections (satisfying "establishes a media session" as
+infrastructure) but streams no real audio — there is nothing to stream
+until a provider is selected.
+
+**A deliberate architecture simplification worth flagging:** A3.8
+specifies the voice gateway authenticates to write appointment/call/turn
+data via "mutual TLS plus a service-scoped token," implying it calls
+apps/api's HTTP layer rather than touching the database directly. This
+build has the voice gateway connect to Postgres directly instead (its own
+`PrismaClient`, same `voice_app` role, same RLS enforcement via
+`withTenant` — see `apps/voice-gateway/src/common/prisma-client.ts`),
+resolving the tenant from the called number through a second
+`SECURITY DEFINER` SQL function
+(`20240103000100_resolve_tenant_by_phone_number`), mirroring the pattern
+already used for login's `resolve_tenant_id_for_email`. This keeps the
+same tenant-isolation guarantee (RLS, not application logic, still does
+the enforcing) without building a second cross-service authentication
+scheme and an `apps/api` calls module in the same session. A fuller
+implementation matching A3.8 literally would route these writes through
+`apps/api` over mTLS with a service-scoped token instead — worth doing
+before this handles real traffic, tracked here rather than silently
+diverged from.

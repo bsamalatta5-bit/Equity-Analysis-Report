@@ -15,6 +15,7 @@
     "@swc/core": "1.16.2",
     "@types/cookie-parser": "1.4.7",
     "@types/supertest": "6.0.2",
+    "@voice-receptionist/logger": "workspace:*",
     "@voice-receptionist/shared": "workspace:*",
     "argon2": "0.41.1",
     "cookie-parser": "1.4.6",

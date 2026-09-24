@@ -8,7 +8,6 @@ for full product context.
 ## Build status
 
 This build was carried out incrementally by an autonomous coding session.
-**Modules 1-4 are built and tested; Modules 5-13 are not.**
 
 | Module | Status |
 |---|---|
@@ -16,16 +15,19 @@ This build was carried out incrementally by an autonomous coding session.
 | 2 — Platform foundation | Built (workspace, Prisma schema, migrations, RLS, guards/filters/pipes) |
 | 3 — Authentication and authorization | Built (argon2id, sessions, refresh rotation, TOTP, CSRF, rate limiting, the A3.7 role matrix) |
 | 4 — Scheduling domain | Built (availability rules, timezone-aware open-slot query, concurrency-safe booking, audit trail) |
-| 5-13 | Not built — see `docs/adr/version-substitutions.md` for the full list and why |
+| 5 — Voice gateway core | Partially built: webhook verification (A5.1), Call/ConsentRecord creation (A5.3), Redis session persistence (A5.5). Real audio streaming (A5.2/A5.6/A5.7) blocked by Module 1 |
+| 6 — Provider abstraction | Built: all four interfaces + fixture adapters, env-based selection, timeouts/typed failures (A6.1-A6.3). No real provider is wired — see Module 1 |
+| 7-13 | Not built — see `docs/adr/version-substitutions.md` and `docs/adr/dialect-feasibility-verdict.md` for the full list and why |
 
 Do not select or wire a real speech/telephony provider, and do not build
-on top of Modules 5+, without first resolving Module 1's halt gate for
-real (`docs/adr/dialect-feasibility-verdict.md`).
+the parts of Modules 5+ that depend on one, without first resolving
+Module 1's halt gate for real (`docs/adr/dialect-feasibility-verdict.md`).
 
 ## Repository layout
 
 - `apps/api` — NestJS core API (Modules 2-4 live here)
-- `apps/voice-gateway`, `apps/dashboard` — not built yet (see their READMEs)
+- `apps/voice-gateway` — real-time call handling (Module 5 core + Module 6 provider adapters)
+- `apps/dashboard` — not built yet (see its README)
 - `packages/shared` — Zod schemas, domain types, constants, typed errors
 - `packages/logger` — the only permitted logger; redacts transcripts/PII/tokens
 - `tools/dialect-feasibility-probe` — Module 1's benchmark harness
@@ -64,6 +66,7 @@ pnpm test:isolation
 
 # 7. Run
 pnpm --filter api dev
+pnpm --filter voice-gateway dev
 ```
 
 If you don't have Docker available, a native PostgreSQL 16 (with the
@@ -91,3 +94,18 @@ If you don't have Docker available, a native PostgreSQL 16 (with the
   exclusion constraint, not application locking**, for double-booking
   safety under concurrency (A4.3) — see
   `tests/integration/scheduling.spec.ts`.
+- **`apps/voice-gateway` connects to Postgres directly** (its own
+  `PrismaClient`, same `voice_app` role, same RLS-via-`withTenant`
+  pattern as `apps/api`) rather than calling `apps/api` over HTTP — a
+  deliberate simplification from A3.8's literal mTLS+service-token
+  design, documented in `docs/adr/dialect-feasibility-verdict.md`. The
+  tenant for an inbound call is resolved from the *called* number only,
+  via a second `SECURITY DEFINER` function
+  (`resolve_tenant_for_phone_number`), mirroring how login resolves a
+  tenant from an email before `app.current_tenant_id` is known.
+- **Telephony webhook verification is real, not a stub**, even though no
+  real telephony vendor is selected: `FixtureTelephonyProvider.
+  verifyWebhook` implements A5.1/A3.8's HMAC-SHA256 + 300s replay window +
+  single-use-nonce scheme in full, because that scheme is the spec's own
+  vendor-agnostic contract. Only `openMediaSession`/`transferCall`/
+  `endCall` (vendor-specific API calls) are stubbed.

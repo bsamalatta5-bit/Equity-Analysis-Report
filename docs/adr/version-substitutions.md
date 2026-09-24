@@ -32,10 +32,9 @@ not substitutions for anything Section 3 named.
 
 These are declared exactly at their Section 3 pin but not yet exercised,
 because the module that uses them is out of this session's scope (see
-`docs/adr/dialect-feasibility-verdict.md` for why Modules 5+ are not
-built):
+`docs/adr/dialect-feasibility-verdict.md` for what is and isn't built,
+and why):
 
-- **ws 8.18.0** — Module 5's voice gateway WebSocket transport.
 - **@testcontainers/postgresql 10.13.2** — not added as a dependency at
   all. This sandbox has no Docker daemon (`dockerd` could not start:
   `ulimit: error setting limit (Operation not permitted)` under the
