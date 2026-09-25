@@ -40,6 +40,43 @@ describe("FixtureLanguageModelProvider.classifyIntent", () => {
     expect(result.intent).toBe("unknown");
     expect(result.confidence).toBeLessThan(0.5);
   });
+
+  it("classifies an emergency keyword ahead of everything else, at very high confidence", async () => {
+    const result = await provider.classifyIntent({
+      callerUtterance: "I'm having chest pain, this is an emergency",
+      conversationHistory: [],
+      language: "en",
+    });
+    expect(result.intent).toBe("emergency");
+    expect(result.confidence).toBeGreaterThan(0.95);
+  });
+});
+
+describe("FixtureLanguageModelProvider.extractSlots", () => {
+  it("extracts embedded slotName:value tokens at high confidence", async () => {
+    const result = await provider.extractSlots({
+      callerUtterance: "book serviceId:svc-1 staffMemberId:staff-1",
+      conversationHistory: [],
+      language: "en",
+      slotNames: ["serviceId", "staffMemberId", "requestedStartAt"],
+    });
+    expect(result.slots["serviceId"]).toBe("svc-1");
+    expect(result.slots["staffMemberId"]).toBe("staff-1");
+    expect(result.slots["requestedStartAt"]).toBeUndefined();
+    expect(result.confidencePerSlot["serviceId"]).toBeGreaterThanOrEqual(0.65);
+    expect(result.confidencePerSlot["requestedStartAt"]).toBeLessThan(0.65);
+  });
+
+  it("returns undefined/low confidence for every slot when nothing is embedded", async () => {
+    const result = await provider.extractSlots({
+      callerUtterance: "I'd like an appointment sometime soon",
+      conversationHistory: [],
+      language: "en",
+      slotNames: ["serviceId"],
+    });
+    expect(result.slots["serviceId"]).toBeUndefined();
+    expect(result.confidencePerSlot["serviceId"]).toBeLessThan(0.65);
+  });
 });
 
 describe("FixtureLanguageModelProvider.draftGroundedResponse (Constraint 2.2)", () => {

@@ -9,15 +9,16 @@ for full product context.
 
 This build was carried out incrementally by an autonomous coding session.
 
-| Module | Status |
-|---|---|
-| 1 — Dialect feasibility probe | Harness built and tested; **verdict NOT_EVALUATED** (halt gate unresolved — see `docs/adr/dialect-feasibility-verdict.md`) |
-| 2 — Platform foundation | Built (workspace, Prisma schema, migrations, RLS, guards/filters/pipes) |
-| 3 — Authentication and authorization | Built (argon2id, sessions, refresh rotation, TOTP, CSRF, rate limiting, the A3.7 role matrix) |
-| 4 — Scheduling domain | Built (availability rules, timezone-aware open-slot query, concurrency-safe booking, audit trail) |
-| 5 — Voice gateway core | Partially built: webhook verification (A5.1), Call/ConsentRecord creation (A5.3), Redis session persistence (A5.5). Real audio streaming (A5.2/A5.6/A5.7) blocked by Module 1 |
-| 6 — Provider abstraction | Built: all four interfaces + fixture adapters, env-based selection, timeouts/typed failures (A6.1-A6.3). No real provider is wired — see Module 1 |
-| 7-13 | Not built — see `docs/adr/version-substitutions.md` and `docs/adr/dialect-feasibility-verdict.md` for the full list and why |
+| Module                                 | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Dialect feasibility probe          | Harness built and tested; **verdict NOT_EVALUATED** (halt gate unresolved — see `docs/adr/dialect-feasibility-verdict.md`)                                                                                                                                                                                                                                                                                                                                |
+| 2 — Platform foundation                | Built (workspace, Prisma schema, migrations, RLS, guards/filters/pipes)                                                                                                                                                                                                                                                                                                                                                                                   |
+| 3 — Authentication and authorization   | Built (argon2id, sessions, refresh rotation, TOTP, CSRF, rate limiting, the A3.7 role matrix)                                                                                                                                                                                                                                                                                                                                                             |
+| 4 — Scheduling domain                  | Built (availability rules, timezone-aware open-slot query, concurrency-safe booking, audit trail)                                                                                                                                                                                                                                                                                                                                                         |
+| 5 — Voice gateway core                 | Partially built: webhook verification (A5.1), Call/ConsentRecord creation (A5.3), Redis session persistence (A5.5). Real audio streaming (A5.2/A5.6/A5.7) blocked by Module 1                                                                                                                                                                                                                                                                             |
+| 6 — Provider abstraction               | Built: all four interfaces + fixture adapters, env-based selection, timeouts/typed failures (A6.1-A6.3). No real provider is wired — see Module 1                                                                                                                                                                                                                                                                                                         |
+| 7 — Dialogue and booking state machine | Built: the full 10-state FSM (A7.1), confidence-based clarification with escalation after 2 consecutive low-confidence turns (A7.2), slot-contention recovery during confirmation via the real `appointment_no_overlap` exclusion constraint (A7.3), consecutive-silence handling (A7.4), against fixture NLU (`slotName:value` token convention, documented as test-only) and a real Postgres database under RLS. Not wired to real audio — see Module 1 |
+| 8-13                                   | Not built — see `docs/adr/version-substitutions.md` and `docs/adr/dialect-feasibility-verdict.md` for the full list and why                                                                                                                                                                                                                                                                                                                               |
 
 Do not select or wire a real speech/telephony provider, and do not build
 the parts of Modules 5+ that depend on one, without first resolving
@@ -26,7 +27,7 @@ Module 1's halt gate for real (`docs/adr/dialect-feasibility-verdict.md`).
 ## Repository layout
 
 - `apps/api` — NestJS core API (Modules 2-4 live here)
-- `apps/voice-gateway` — real-time call handling (Module 5 core + Module 6 provider adapters)
+- `apps/voice-gateway` — real-time call handling (Module 5 core + Module 6 provider adapters + Module 7 dialogue/booking FSM)
 - `apps/dashboard` — not built yet (see its README)
 - `packages/shared` — Zod schemas, domain types, constants, typed errors
 - `packages/logger` — the only permitted logger; redacts transcripts/PII/tokens
@@ -99,13 +100,13 @@ If you don't have Docker available, a native PostgreSQL 16 (with the
   pattern as `apps/api`) rather than calling `apps/api` over HTTP — a
   deliberate simplification from A3.8's literal mTLS+service-token
   design, documented in `docs/adr/dialect-feasibility-verdict.md`. The
-  tenant for an inbound call is resolved from the *called* number only,
+  tenant for an inbound call is resolved from the _called_ number only,
   via a second `SECURITY DEFINER` function
   (`resolve_tenant_for_phone_number`), mirroring how login resolves a
   tenant from an email before `app.current_tenant_id` is known.
 - **Telephony webhook verification is real, not a stub**, even though no
   real telephony vendor is selected: `FixtureTelephonyProvider.
-  verifyWebhook` implements A5.1/A3.8's HMAC-SHA256 + 300s replay window +
+verifyWebhook` implements A5.1/A3.8's HMAC-SHA256 + 300s replay window +
   single-use-nonce scheme in full, because that scheme is the spec's own
   vendor-agnostic contract. Only `openMediaSession`/`transferCall`/
   `endCall` (vendor-specific API calls) are stubbed.

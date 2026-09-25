@@ -103,15 +103,34 @@ and Redis-backed session state that survives a process restart (A5.5).
 None of this required resolving the halt gate, because none of it touches
 real audio or a real speech/telephony vendor.
 
+**What was subsequently built anyway (Module 7):** the dialogue and
+booking state machine (`apps/voice-gateway/src/booking/dialogue-state-machine.ts`)
+implementing all 10 states from Section 6 (A7.1), confidence-based
+clarification that escalates after two consecutive low-confidence turns
+(A7.2), slot-contention recovery during confirmation — retried against the
+real `appointment_no_overlap` exclusion constraint, not a mock (A7.3), and
+consecutive-silence handling (A7.4). This was possible without resolving
+the halt gate because the FSM itself is a pure function of
+already-recognized text and a `TurnEvent`: it never calls a speech or telephony
+provider directly, only the `LanguageModelProvider` interface (intent
+classification and slot extraction), which the fixture adapter satisfies
+using a documented test-only `slotName:value` token convention (see
+`apps/voice-gateway/src/providers/fixture/language-model.fixture.ts`) —
+not real NLU. All availability/booking reads and writes still go through
+`withTenant`, so RLS enforcement is real even though the language
+understanding driving them is not.
+
 **What remains genuinely blocked:** real-time bidirectional audio
 streaming and its latency/language-detection accuracy claims (A5.2, A5.6,
-A5.7), the dialogue state machine (Module 7), knowledge retrieval (Module
-8), the safety classifier (Module 9), and everything else that needs an
-actual speech recognition, synthesis, or language model call to mean
-anything. `apps/voice-gateway/src/main.ts`'s WebSocket endpoint accepts
-and tracks connections (satisfying "establishes a media session" as
-infrastructure) but streams no real audio — there is nothing to stream
-until a provider is selected.
+A5.7), knowledge retrieval (Module 8), the safety classifier (Module 9),
+and everything else that needs an actual speech recognition, synthesis, or
+language model call to mean anything. `apps/voice-gateway/src/main.ts`'s
+WebSocket endpoint accepts and tracks connections (satisfying "establishes
+a media session" as infrastructure) but streams no real audio — there is
+nothing to stream until a provider is selected. Module 7's FSM is wired to
+recognized text and fixture NLU only; it is not wired to the WebSocket
+audio path, since there is no real recognizer to produce that text from a
+real call yet.
 
 **A deliberate architecture simplification worth flagging:** A3.8
 specifies the voice gateway authenticates to write appointment/call/turn

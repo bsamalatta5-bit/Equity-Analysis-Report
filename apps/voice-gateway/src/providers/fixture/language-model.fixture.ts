@@ -26,6 +26,14 @@ export class FixtureLanguageModelProvider implements LanguageModelProvider {
 
   private async doClassifyIntent(input: LanguageModelInput): Promise<IntentClassification> {
     const text = input.callerUtterance.toLowerCase();
+    // Checked first: a mechanical stub only. Real clinical/emergency
+    // detection is Module 9's safety classifier (not built — see
+    // docs/adr/dialect-feasibility-verdict.md); this exists so
+    // EmergencyExit's state-machine *mechanics* (interrupt within one
+    // turn, transfer requested) are exercisable in tests.
+    if (text.includes("emergency") || text.includes("طارئ") || text.includes("chest pain")) {
+      return { intent: "emergency", confidence: 0.99 };
+    }
     // Checked before the booking keywords: "cancel my appointment" contains
     // "appointment" too, and cancellation is the more specific intent.
     if (text.includes("الغ") || text.includes("cancel")) {
@@ -45,17 +53,35 @@ export class FixtureLanguageModelProvider implements LanguageModelProvider {
   }
 
   private async doExtractSlots(input: SlotExtractionInput): Promise<SlotExtractionResult> {
+    // Test-only convention, not real NLU: a scripted utterance can embed
+    // `slotName:value` tokens (e.g. "book serviceId:abc-123
+    // staffMemberId:def-456 requestedStartAt:2030-06-01T09:00:00.000Z")
+    // and this fixture extracts them at high confidence, the same way
+    // FixtureSpeechRecognitionProvider takes a canned script instead of
+    // doing real audio recognition. Anything not embedded this way comes
+    // back low-confidence, exercising A7.2's clarification path.
+    const found = new Map<string, string>();
+    for (const match of input.callerUtterance.matchAll(/(\w+):(\S+)/g)) {
+      found.set(match[1]!, match[2]!);
+    }
+
     const slots: Record<string, string | undefined> = {};
     const confidencePerSlot: Record<string, number> = {};
     for (const slotName of input.slotNames) {
-      slots[slotName] = undefined;
-      confidencePerSlot[slotName] = 0;
+      const value = found.get(slotName);
+      slots[slotName] = value;
+      confidencePerSlot[slotName] = value ? 0.9 : 0.3;
     }
     return { slots, confidencePerSlot };
   }
 
   async draftGroundedResponse(input: GroundedResponseInput): Promise<GroundedResponseResult> {
-    return withTimeout(this.doDraftGroundedResponse(input), TIMEOUT_MS, PROVIDER_NAME, "draftGroundedResponse");
+    return withTimeout(
+      this.doDraftGroundedResponse(input),
+      TIMEOUT_MS,
+      PROVIDER_NAME,
+      "draftGroundedResponse",
+    );
   }
 
   private async doDraftGroundedResponse(input: GroundedResponseInput): Promise<GroundedResponseResult> {
