@@ -50,14 +50,13 @@ describe("FixtureLanguageModelProvider.classifyIntent", () => {
     expect(result.intent).toBe("ask_question");
   });
 
-  it("classifies an emergency keyword ahead of everything else, at very high confidence", async () => {
+  it("no longer classifies an 'emergency' intent — Module 9's safety classifier owns that detection now", async () => {
     const result = await provider.classifyIntent({
       callerUtterance: "I'm having chest pain, this is an emergency",
       conversationHistory: [],
       language: "en",
     });
-    expect(result.intent).toBe("emergency");
-    expect(result.confidence).toBeGreaterThan(0.95);
+    expect(result.intent).not.toBe("emergency");
   });
 });
 

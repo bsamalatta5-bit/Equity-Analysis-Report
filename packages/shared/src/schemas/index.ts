@@ -7,3 +7,4 @@ export * from "./availability";
 export * from "./contact";
 export * from "./appointment";
 export * from "./knowledge";
+export * from "./escalation";

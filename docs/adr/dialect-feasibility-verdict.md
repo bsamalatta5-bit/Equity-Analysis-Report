@@ -157,16 +157,31 @@ at all when similarity falls below the threshold, so there is no code
 path by which an unrelated stored fact (a price, a service name) can
 reach the caller.
 
+**What was subsequently built anyway (Module 9):** the safety classifier
+itself (`apps/voice-gateway/src/safety/safety-classifier.ts`) is **not**
+blocked by this halt gate — it is a deterministic, bilingual rule-based
+implementation that runs on already-recognized text, exactly like Modules
+7 and 8's logic, and needs no ASR/TTS/LLM vendor to execute. It is wired
+into every dialogue turn (A9.1, A9.3), a structural output guard protects
+the one path with tenant-authored/model-drafted content (A9.4), and
+provider-failure escalation with active-hours routing is fully built and
+tested (A9.5). What remains open for Module 9 is narrower and different in
+kind from this document's gap: not a missing implementation, but missing
+_evidence_ that the classifier's real-world recall and false-positive rate
+clear A9.2's numeric bar — recorded separately in
+`docs/adr/safety-classifier-verdict.md`, since it is its own halt-gate-like
+question, not a restatement of this one.
+
 **What remains genuinely blocked:** real-time bidirectional audio
 streaming and its latency/language-detection accuracy claims (A5.2, A5.6,
-A5.7), the safety classifier (Module 9), and everything else that needs
-an actual speech recognition, synthesis, or language model call to mean
-anything. `apps/voice-gateway/src/main.ts`'s WebSocket endpoint accepts
-and tracks connections (satisfying "establishes a media session" as
-infrastructure) but streams no real audio — there is nothing to stream
-until a provider is selected. Modules 7 and 8's FSM logic is wired to
-recognized text, fixture NLU, and a fixture embedding function only; none
-of it is wired to the WebSocket audio path, since there is no real
+A5.7), and everything else that needs an actual speech recognition,
+synthesis, or language model call to mean anything. `apps/voice-gateway/src/main.ts`'s
+WebSocket endpoint accepts and tracks connections (satisfying "establishes
+a media session" as infrastructure) but streams no real audio — there is
+nothing to stream until a provider is selected. Modules 7, 8, and 9's FSM
+logic is wired to recognized text, fixture NLU, and a fixture embedding
+function only; none of it is wired to the WebSocket audio path, since
+there is no real
 recognizer to produce that text from a real call yet.
 
 **A deliberate architecture simplification worth flagging:** A3.8

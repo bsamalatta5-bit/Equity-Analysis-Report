@@ -19,7 +19,8 @@ This build was carried out incrementally by an autonomous coding session.
 | 6 — Provider abstraction               | Built: all four interfaces + fixture adapters, env-based selection, timeouts/typed failures (A6.1-A6.3). No real provider is wired — see Module 1                                                                                                                                                                                                                                                                                                                                           |
 | 7 — Dialogue and booking state machine | Built: the full 10-state FSM (A7.1), confidence-based clarification with escalation after 2 consecutive low-confidence turns (A7.2), slot-contention recovery during confirmation via the real `appointment_no_overlap` exclusion constraint (A7.3), consecutive-silence handling (A7.4), against fixture NLU (`slotName:value` token convention, documented as test-only) and a real Postgres database under RLS. Not wired to real audio — see Module 1                                   |
 | 8 — Knowledge retrieval                | Built: tenant-scoped `KnowledgeItem` CRUD with embedding writes (`apps/api/src/knowledge`), a pgvector nearest-neighbor retrieval client with the A8.2 similarity threshold gate (`apps/voice-gateway/src/knowledge`), and the `ask_question` dialogue path wired into Module 7's FSM. Real semantic embeddings are blocked by Module 1 like every other language-model capability; a deterministic bag-of-words hashing embedder stands in — see `docs/adr/dialect-feasibility-verdict.md` |
-| 9-13                                   | Not built — see `docs/adr/version-substitutions.md` and `docs/adr/dialect-feasibility-verdict.md` for the full list and why                                                                                                                                                                                                                                                                                                                                                                 |
+| 9 — Safety and escalation              | Built: a deterministic bilingual safety classifier evaluated on every caller turn from every dialogue state (A9.1, A9.3), a structural clinical-content output guard (A9.4), and provider-failure escalation with `EscalationRule` active-hours routing (A9.5, including `apps/api/src/escalation` CRUD). **A9.2's recall/false-positive verdict is NOT_EVALUATED** — real labeled corpora don't exist here; see `docs/adr/safety-classifier-verdict.md`                                    |
+| 10-13                                  | Not built — see `docs/adr/version-substitutions.md` and `docs/adr/dialect-feasibility-verdict.md` for the full list and why                                                                                                                                                                                                                                                                                                                                                                 |
 
 Do not select or wire a real speech/telephony provider, and do not build
 the parts of Modules 5+ that depend on one, without first resolving
@@ -27,15 +28,16 @@ Module 1's halt gate for real (`docs/adr/dialect-feasibility-verdict.md`).
 
 ## Repository layout
 
-- `apps/api` — NestJS core API (Modules 2-4 and Module 8's knowledge CRUD live here)
-- `apps/voice-gateway` — real-time call handling (Module 5 core + Module 6 provider adapters + Module 7 dialogue/booking FSM + Module 8 retrieval client)
+- `apps/api` — NestJS core API (Modules 2-4, Module 8's knowledge CRUD, and Module 9's escalation-rule CRUD live here)
+- `apps/voice-gateway` — real-time call handling (Module 5 core + Module 6 provider adapters + Module 7 dialogue/booking FSM + Module 8 retrieval client + Module 9 safety classifier/output guard/provider-failure degradation)
 - `apps/dashboard` — not built yet (see its README)
 - `packages/shared` — Zod schemas, domain types, constants, typed errors
 - `packages/logger` — the only permitted logger; redacts transcripts/PII/tokens
 - `tools/dialect-feasibility-probe` — Module 1's benchmark harness
 - `tests/integration`, `tests/isolation` — automated tests against a real Postgres+Redis
-- `docs/adr` — architecture decisions, including the two documents above
-- `infra`, `tests/e2e`, `tests/load`, `tests/voice` — scaffolding for Module 13/12/9, not populated
+- `tests/voice/corpora` — Module 9's safety-classifier corpora (synthetic placeholders — see `docs/adr/safety-classifier-verdict.md`)
+- `docs/adr` — architecture decisions, including the three documents above
+- `infra`, `tests/e2e`, `tests/load` — scaffolding for Modules 10-13, not populated
 
 ## Setup
 

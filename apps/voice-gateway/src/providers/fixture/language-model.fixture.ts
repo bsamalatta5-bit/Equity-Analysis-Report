@@ -26,14 +26,10 @@ export class FixtureLanguageModelProvider implements LanguageModelProvider {
 
   private async doClassifyIntent(input: LanguageModelInput): Promise<IntentClassification> {
     const text = input.callerUtterance.toLowerCase();
-    // Checked first: a mechanical stub only. Real clinical/emergency
-    // detection is Module 9's safety classifier (not built — see
-    // docs/adr/dialect-feasibility-verdict.md); this exists so
-    // EmergencyExit's state-machine *mechanics* (interrupt within one
-    // turn, transfer requested) are exercisable in tests.
-    if (text.includes("emergency") || text.includes("طارئ") || text.includes("chest pain")) {
-      return { intent: "emergency", confidence: 0.99 };
-    }
+    // No "emergency" branch: Module 9's safety classifier
+    // (apps/voice-gateway/src/safety/safety-classifier.ts) now owns
+    // detecting that, evaluated on every turn independently of intent
+    // classification — see dialogue-state-machine.ts's handleTurn.
     // Checked before the booking keywords: "cancel my appointment" contains
     // "appointment" too, and cancellation is the more specific intent.
     if (text.includes("الغ") || text.includes("cancel")) {

@@ -330,6 +330,16 @@ describe("Knowledge retrieval (Module 8)", () => {
       await voiceGatewayPrisma.$disconnect();
     });
 
+    async function createCall(): Promise<string> {
+      const contact = await migratorPrisma.contact.create({
+        data: { tenantId, phoneE164: `+9665${Math.floor(10000000 + Math.random() * 89999999)}` },
+      });
+      const call = await migratorPrisma.call.create({
+        data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
+      });
+      return call.id;
+    }
+
     function newMachine(callId: string): DialogueStateMachine {
       return new DialogueStateMachine({
         languageModel: new FixtureLanguageModelProvider(),
@@ -346,7 +356,7 @@ describe("Knowledge retrieval (Module 8)", () => {
     }
 
     it("A8.3: answers a matched question with only the retrieved record's text — no invented or unrelated facts", async () => {
-      const machine = newMachine(randomUUID());
+      const machine = newMachine(await createCall());
       let result = machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
       expect(result.context.state).toBe("IntentCapture");
@@ -361,7 +371,7 @@ describe("Knowledge retrieval (Module 8)", () => {
     });
 
     it("A8.2: a question with no matching knowledge record states the answer is unavailable and offers escalation, with no drafted (or invented) answer", async () => {
-      const machine = newMachine(randomUUID());
+      const machine = newMachine(await createCall());
       let result = machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
 

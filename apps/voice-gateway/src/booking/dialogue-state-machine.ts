@@ -1,9 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
-import { THRESHOLDS, type KnowledgeLanguage } from "@voice-receptionist/shared";
+import {
+  ProviderFailureError,
+  ProviderTimeoutError,
+  THRESHOLDS,
+  type CallDisposition,
+  type KnowledgeLanguage,
+} from "@voice-receptionist/shared";
 import { withTenant } from "../common/prisma-client";
 import { evaluateConfidence } from "../dialogue/clarification";
+import { decideProviderFailureEscalation } from "../degradation/provider-failure";
 import { retrieveTopKnowledgeMatch } from "../knowledge/retrieval";
 import type { LanguageModelProvider } from "../providers/language-model.provider";
+import { classifySafety, type SafetyClassification } from "../safety/safety-classifier";
+import { containsClinicalContent } from "../safety/clinical-content-guard";
 import { findNearestOpenSlots, isExactSlotOpen } from "./availability-lookup";
 import { writeConfirmedAppointment } from "./booking-writer";
 import type { BookingSlots, DialogueContext, OpenSlotCandidate, TurnEvent, TurnResult } from "./types";
@@ -70,19 +79,40 @@ export class DialogueStateMachine {
 
     const contextAfterUtterance: DialogueContext = { ...context, consecutiveSilenceCount: 0 };
 
-    switch (contextAfterUtterance.state) {
-      case "LanguageDetection":
-        return this.handleLanguageDetection(contextAfterUtterance, event);
-      case "IntentCapture":
-        return this.handleIntentCapture(contextAfterUtterance, event);
-      case "SlotCollection":
-        return this.handleSlotCollection(contextAfterUtterance, event);
-      case "AvailabilityCheck":
-        return this.handleAvailabilityCheck(contextAfterUtterance, event);
-      case "Confirmation":
-        return this.handleConfirmation(contextAfterUtterance, event);
-      default:
-        return this.terminalNoOp(contextAfterUtterance);
+    // A9.1: evaluated on every caller turn, from every state — checked
+    // ahead of the per-state dispatch below so an emergency mid-booking
+    // (e.g. during SlotCollection) is caught exactly as reliably as one
+    // during IntentCapture. A9.3 treats every positive result identically,
+    // regardless of dialogue state or SafetyCategory.
+    const safety = classifySafety(event.text);
+    if (safety.flagged) {
+      return this.handleSafetyFlag(contextAfterUtterance, safety);
+    }
+
+    try {
+      switch (contextAfterUtterance.state) {
+        case "LanguageDetection":
+          return await this.handleLanguageDetection(contextAfterUtterance, event);
+        case "IntentCapture":
+          return await this.handleIntentCapture(contextAfterUtterance, event);
+        case "SlotCollection":
+          return await this.handleSlotCollection(contextAfterUtterance, event);
+        case "AvailabilityCheck":
+          return await this.handleAvailabilityCheck(contextAfterUtterance, event);
+        case "Confirmation":
+          return await this.handleConfirmation(contextAfterUtterance, event);
+        default:
+          return this.terminalNoOp(contextAfterUtterance);
+      }
+    } catch (error) {
+      // A9.5: a provider failure (a real AppError from a provider's own
+      // timeout/failure path — see with-timeout.ts — not a bug in this
+      // state machine) never surfaces as an unhandled rejection to the
+      // caller; it always resolves to a transfer or a captured message.
+      if (error instanceof ProviderFailureError || error instanceof ProviderTimeoutError) {
+        return this.handleProviderFailure(contextAfterUtterance, withDefaultLanguage(context.language));
+      }
+      throw error;
     }
   }
 
@@ -96,11 +126,12 @@ export class DialogueStateMachine {
   }
 
   /** A7.4: 7s silence -> one re-prompt; a second consecutive silence closes the call with a callback offer. */
-  private handleSilence(context: DialogueContext): TurnResult {
+  private async handleSilence(context: DialogueContext): Promise<TurnResult> {
     const nextSilenceCount = context.consecutiveSilenceCount + 1;
     const language = withDefaultLanguage(context.language);
 
     if (nextSilenceCount >= 2) {
+      await this.recordDisposition("abandoned");
       return {
         context: { ...context, state: "Closure", consecutiveSilenceCount: nextSilenceCount },
         assistantText:
@@ -118,6 +149,72 @@ export class DialogueStateMachine {
       callShouldEnd: false,
       transferRequested: false,
     };
+  }
+
+  /**
+   * A9.3: "A positive result interrupts within one turn, states the
+   * emergency-services instruction, and attempts transfer within 3 seconds
+   * of classification." The 3-second transfer attempt is the telephony
+   * layer's responsibility once transferRequested is true (Module 5,
+   * TelephonyProvider.transferCall) — this method's job ends at requesting
+   * it immediately, in the same turn, with no further caller turns in
+   * between.
+   */
+  private async handleSafetyFlag(
+    context: DialogueContext,
+    _safety: SafetyClassification,
+  ): Promise<TurnResult> {
+    const language = withDefaultLanguage(context.language);
+    await this.recordDisposition("emergency_transfer");
+    return {
+      context: { ...context, state: "EmergencyExit" },
+      assistantText:
+        language === "ar"
+          ? "إذا كانت هذه حالة طارئة تهدد الحياة، الرجاء الاتصال بالإسعاف فورًا. جارٍ تحويلك الآن."
+          : "If this is a life-threatening emergency, please call emergency services now. Transferring you now.",
+      callShouldEnd: false,
+      transferRequested: true,
+    };
+  }
+
+  /** A9.5. */
+  private async handleProviderFailure(
+    context: DialogueContext,
+    language: KnowledgeLanguage,
+  ): Promise<TurnResult> {
+    const decision = await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      decideProviderFailureEscalation(tx, { locationId: this.deps.locationId, now: new Date() }),
+    );
+
+    if (decision.kind === "transfer") {
+      await this.recordDisposition("provider_failure");
+      return {
+        context: { ...context, state: "Escalation" },
+        assistantText:
+          language === "ar"
+            ? "نواجه مشكلة تقنية. سأقوم بتحويلك إلى أحد أفراد فريقنا الآن."
+            : "We're experiencing a technical issue. Transferring you to our team now.",
+        callShouldEnd: false,
+        transferRequested: true,
+      };
+    }
+
+    await this.recordDisposition("message_captured");
+    return {
+      context: { ...context, state: "Closure" },
+      assistantText:
+        language === "ar"
+          ? "نواجه مشكلة تقنية خارج ساعات الدعم. سنتصل بك للمتابعة قريبًا."
+          : "We're experiencing a technical issue outside our support hours. We'll call you back soon.",
+      callShouldEnd: true,
+      transferRequested: false,
+    };
+  }
+
+  private async recordDisposition(disposition: CallDisposition): Promise<void> {
+    await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      tx.call.update({ where: { id: this.deps.callId }, data: { disposition } }),
+    );
   }
 
   private async handleLanguageDetection(
@@ -163,17 +260,10 @@ export class DialogueStateMachine {
 
     const resetContext = { ...context, consecutiveLowConfidenceCount: 0, intent: classification.intent };
 
-    if (classification.intent === "emergency") {
-      return {
-        context: { ...resetContext, state: "EmergencyExit" },
-        assistantText:
-          language === "ar"
-            ? "إذا كانت هذه حالة طارئة تهدد الحياة، الرجاء الاتصال بالإسعاف فورًا. جارٍ تحويلك الآن."
-            : "If this is a life-threatening emergency, please call emergency services now. Transferring you now.",
-        callShouldEnd: false,
-        transferRequested: true,
-      };
-    }
+    // No "emergency" branch here: Module 9's safety classifier
+    // (classifySafety, checked in handleTurn before this method ever runs)
+    // is what detects that now, on every turn from every state — not just
+    // while IntentCapture happens to be classifying intent.
 
     if (classification.intent === "request_human" || classification.intent === "cancel_appointment") {
       return this.escalate(resetContext, language);
@@ -227,6 +317,14 @@ export class DialogueStateMachine {
       retrievedKnowledge: [{ questionText: match.questionText, answerText: match.answerText }],
     });
 
+    // A9.4: a second, structural guard on the one output path this codebase
+    // doesn't fully control the contents of (see clinical-content-guard.ts).
+    // Refuses to speak the drafted text at all if it looks clinical —
+    // escalates instead, same as an unavailable answer.
+    if (containsClinicalContent(drafted.responseText)) {
+      return this.escalateWithUnavailableAnswer(context, language);
+    }
+
     return {
       context: { ...context, state: "IntentCapture" },
       assistantText: drafted.responseText,
@@ -235,7 +333,11 @@ export class DialogueStateMachine {
     };
   }
 
-  private escalateWithUnavailableAnswer(context: DialogueContext, language: KnowledgeLanguage): TurnResult {
+  private async escalateWithUnavailableAnswer(
+    context: DialogueContext,
+    language: KnowledgeLanguage,
+  ): Promise<TurnResult> {
+    await this.recordDisposition("escalated");
     return {
       context: { ...context, state: "Escalation" },
       assistantText:
@@ -464,6 +566,7 @@ export class DialogueStateMachine {
       return this.offerAlternatives(writingContext, language, requestedStartAt);
     }
 
+    await this.recordDisposition("contained");
     return {
       context: { ...writingContext, state: "Closure" },
       bookingOutcome: outcome,
@@ -476,7 +579,8 @@ export class DialogueStateMachine {
     };
   }
 
-  private escalate(context: DialogueContext, language: KnowledgeLanguage): TurnResult {
+  private async escalate(context: DialogueContext, language: KnowledgeLanguage): Promise<TurnResult> {
+    await this.recordDisposition("escalated");
     return {
       context: { ...context, state: "Escalation" },
       assistantText:
