@@ -120,17 +120,54 @@ not real NLU. All availability/booking reads and writes still go through
 `withTenant`, so RLS enforcement is real even though the language
 understanding driving them is not.
 
+**What was subsequently built anyway (Module 8):** tenant-scoped
+`KnowledgeItem` CRUD with embedding writes
+(`apps/api/src/knowledge/knowledge.service.ts`), and a pgvector
+nearest-neighbor retrieval client with the A8.2 similarity threshold gate
+(`apps/voice-gateway/src/knowledge/retrieval.ts`), wired into Module 7's
+FSM as a new `ask_question` intent branch. Section 6's Module 6 names
+exactly four provider interfaces — none of them an embedding provider —
+so knowledge retrieval had no fixture convention to reuse. Rather than
+invent a fifth env-selected provider abstraction purely to wrap something
+this session cannot make real anyway, `packages/shared/src/embedding/hashing-embedder.ts`
+adds a small, pure, deterministic function (`computeHashingEmbedding`):
+Unicode-aware bag-of-words tokenization, FNV-1a hashing into one of
+KnowledgeItem.embedding's 1536 dimensions per token, L2-normalized. Its
+cosine similarity is real and testable — matching vocabulary scores
+higher than unrelated text, in both Arabic and English — but it is not
+semantic (no synonym or paraphrase recognition), so it stands in for a
+real embedding model for exactly the same reason the Module 6 fixtures
+stand in for real ASR/TTS/NLU: no such provider has been selected, because
+Module 1's gate is what selecting one would depend on. Both apps/api's
+writes and apps/voice-gateway's reads call this same shared function, so
+a KnowledgeItem created through the dashboard-facing API is genuinely
+retrievable through the voice pipeline's read path, not just
+schema-compatible with it — this is not a lower bar than Modules 6/7's
+provider-based fixtures. Embeddings are keyed on `questionText` alone
+(not blended with `answerText`): retrieval embeds the caller's spoken
+question and compares it against the same space, and A8.2's threshold
+gate only holds together when both sides represent the same kind of
+text. A8.1's tenant isolation runs on RLS as everywhere else in this
+codebase, plus an explicit `"tenantId" = $tenantId` predicate in the raw
+SQL query itself (`retrieveTopKnowledgeMatch`), matching the same
+defense-in-depth convention `tenants.service.ts` already uses for any
+table with a direct tenantId column. A8.3's grounding is structural, not
+a heuristic check after the fact: `draftGroundedResponse` is never called
+at all when similarity falls below the threshold, so there is no code
+path by which an unrelated stored fact (a price, a service name) can
+reach the caller.
+
 **What remains genuinely blocked:** real-time bidirectional audio
 streaming and its latency/language-detection accuracy claims (A5.2, A5.6,
-A5.7), knowledge retrieval (Module 8), the safety classifier (Module 9),
-and everything else that needs an actual speech recognition, synthesis, or
-language model call to mean anything. `apps/voice-gateway/src/main.ts`'s
-WebSocket endpoint accepts and tracks connections (satisfying "establishes
-a media session" as infrastructure) but streams no real audio — there is
-nothing to stream until a provider is selected. Module 7's FSM is wired to
-recognized text and fixture NLU only; it is not wired to the WebSocket
-audio path, since there is no real recognizer to produce that text from a
-real call yet.
+A5.7), the safety classifier (Module 9), and everything else that needs
+an actual speech recognition, synthesis, or language model call to mean
+anything. `apps/voice-gateway/src/main.ts`'s WebSocket endpoint accepts
+and tracks connections (satisfying "establishes a media session" as
+infrastructure) but streams no real audio — there is nothing to stream
+until a provider is selected. Modules 7 and 8's FSM logic is wired to
+recognized text, fixture NLU, and a fixture embedding function only; none
+of it is wired to the WebSocket audio path, since there is no real
+recognizer to produce that text from a real call yet.
 
 **A deliberate architecture simplification worth flagging:** A3.8
 specifies the voice gateway authenticates to write appointment/call/turn

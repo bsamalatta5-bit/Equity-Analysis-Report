@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
 import { authenticator } from "otplib";
-import { THRESHOLDS } from "@voice-receptionist/shared";
+import { computeHashingEmbedding, toVectorLiteral, THRESHOLDS } from "@voice-receptionist/shared";
 
 const prisma = new PrismaClient();
 
@@ -146,21 +146,26 @@ async function main(): Promise<void> {
 
   // KnowledgeItem.embedding is an Unsupported("vector(1536)") column, which
   // Prisma Client cannot read or write through its normal query API — raw
-  // SQL is required for this one column. A real embedding requires the
-  // language model provider chosen after Module 1's feasibility probe
-  // clears its gate (see docs/adr/dialect-feasibility-verdict.md); seeded
-  // here as a zero vector placeholder so knowledge_item_embedding_idx has a
-  // row to index.
-  const zeroVector = `[${Array(1536).fill(0).join(",")}]`;
+  // SQL is required for this one column (Module 8's apps/api/src/knowledge
+  // service does the same for every create/update). A real embedding
+  // requires the language model provider chosen after Module 1's
+  // feasibility probe clears its gate (see
+  // docs/adr/dialect-feasibility-verdict.md); computeHashingEmbedding is
+  // the same fixture-quality stand-in Module 8 uses everywhere else, so
+  // this seeded row is actually retrievable by a matching query, not just
+  // present for the index to have a row.
+  const seedQuestion = "What are your opening hours?";
+  const seedAnswer = "We are open Sunday to Thursday, 9 AM to 5 PM.";
+  const seedEmbedding = toVectorLiteral(computeHashingEmbedding(seedQuestion));
   await prisma.$executeRaw`
     INSERT INTO "KnowledgeItem" (id, "tenantId", "questionText", "answerText", language, embedding, active)
     VALUES (
       ${randomUUID()}::uuid,
       ${tenant.id}::uuid,
-      ${"What are your opening hours?"},
-      ${"We are open Sunday to Thursday, 9 AM to 5 PM."},
+      ${seedQuestion},
+      ${seedAnswer},
       ${"en"}::"KnowledgeLanguage",
-      ${zeroVector}::vector(1536),
+      ${seedEmbedding}::vector(1536),
       true
     )
   `;

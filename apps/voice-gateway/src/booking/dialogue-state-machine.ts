@@ -1,7 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
-import type { KnowledgeLanguage } from "@voice-receptionist/shared";
+import { THRESHOLDS, type KnowledgeLanguage } from "@voice-receptionist/shared";
 import { withTenant } from "../common/prisma-client";
 import { evaluateConfidence } from "../dialogue/clarification";
+import { retrieveTopKnowledgeMatch } from "../knowledge/retrieval";
 import type { LanguageModelProvider } from "../providers/language-model.provider";
 import { findNearestOpenSlots, isExactSlotOpen } from "./availability-lookup";
 import { writeConfirmedAppointment } from "./booking-writer";
@@ -190,7 +191,60 @@ export class DialogueStateMachine {
       };
     }
 
+    if (classification.intent === "ask_question") {
+      return this.answerQuestion(resetContext, language, event.text);
+    }
+
     return this.escalate(resetContext, language);
+  }
+
+  /**
+   * Module 8 (A8.1-A8.3). Retrieval runs under `withTenant`, so it is
+   * confined to this call's own tenant both by RLS and by the explicit
+   * predicate in retrieveTopKnowledgeMatch. Below the similarity
+   * threshold, this never calls draftGroundedResponse at all — A8.2 says
+   * "no drafted answer", not "a hedged answer" — and instead states the
+   * answer is unavailable and offers escalation, the same
+   * state/transferRequested shape as escalate() uses elsewhere.
+   */
+  private async answerQuestion(
+    context: DialogueContext,
+    language: KnowledgeLanguage,
+    questionText: string,
+  ): Promise<TurnResult> {
+    const match = await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      retrieveTopKnowledgeMatch(tx, { tenantId: this.deps.tenantId, queryText: questionText, language }),
+    );
+
+    if (!match || match.similarity < THRESHOLDS.KNOWLEDGE_SIMILARITY_MIN) {
+      return this.escalateWithUnavailableAnswer(context, language);
+    }
+
+    const drafted = await this.deps.languageModel.draftGroundedResponse({
+      callerUtterance: questionText,
+      conversationHistory: conversationHistoryPlaceholder(),
+      language,
+      retrievedKnowledge: [{ questionText: match.questionText, answerText: match.answerText }],
+    });
+
+    return {
+      context: { ...context, state: "IntentCapture" },
+      assistantText: drafted.responseText,
+      callShouldEnd: false,
+      transferRequested: false,
+    };
+  }
+
+  private escalateWithUnavailableAnswer(context: DialogueContext, language: KnowledgeLanguage): TurnResult {
+    return {
+      context: { ...context, state: "Escalation" },
+      assistantText:
+        language === "ar"
+          ? "ليس لدي إجابة على ذلك. دعني أحولك إلى أحد أفراد فريقنا."
+          : "I don't have an answer for that. Let me connect you with a member of our team.",
+      callShouldEnd: false,
+      transferRequested: true,
+    };
   }
 
   private async handleSlotCollection(

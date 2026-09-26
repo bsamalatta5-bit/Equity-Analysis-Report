@@ -41,6 +41,15 @@ describe("FixtureLanguageModelProvider.classifyIntent", () => {
     expect(result.confidence).toBeLessThan(0.5);
   });
 
+  it("classifies a business-information question by its question mark", async () => {
+    const result = await provider.classifyIntent({
+      callerUtterance: "What are your opening hours?",
+      conversationHistory: [],
+      language: "en",
+    });
+    expect(result.intent).toBe("ask_question");
+  });
+
   it("classifies an emergency keyword ahead of everything else, at very high confidence", async () => {
     const result = await provider.classifyIntent({
       callerUtterance: "I'm having chest pain, this is an emergency",

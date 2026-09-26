@@ -17,6 +17,7 @@ import { LocationsModule } from "./locations/locations.module";
 import { CatalogModule } from "./catalog/catalog.module";
 import { AvailabilityModule } from "./availability/availability.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
+import { KnowledgeModule } from "./knowledge/knowledge.module";
 import { AuditModule } from "./audit/audit.module";
 
 @Module({
@@ -33,6 +34,7 @@ import { AuditModule } from "./audit/audit.module";
     CatalogModule,
     AvailabilityModule,
     AppointmentsModule,
+    KnowledgeModule,
   ],
   providers: [
     // Order matters: SessionGuard establishes request.principal, RolesGuard

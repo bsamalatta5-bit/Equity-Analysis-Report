@@ -45,6 +45,13 @@ export class FixtureLanguageModelProvider implements LanguageModelProvider {
     if (text.includes("انسان") || text.includes("human") || text.includes("موظف")) {
       return { intent: "request_human", confidence: 0.95 };
     }
+    // Module 8: a generic question mark stands in for real intent
+    // classification recognizing a business-information question ("what
+    // are your hours?", "كم سعر...؟") — not itself an NLU claim, same
+    // convention as the keyword checks above.
+    if (text.includes("?") || text.includes("؟")) {
+      return { intent: "ask_question", confidence: 0.85 };
+    }
     return { intent: "unknown", confidence: 0.3 };
   }
 
