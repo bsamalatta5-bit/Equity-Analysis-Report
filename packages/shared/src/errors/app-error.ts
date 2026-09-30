@@ -127,3 +127,28 @@ export class ProviderFailureError extends AppError {
     this.name = "ProviderFailureError";
   }
 }
+
+/** A10.1: the consent announcement must be recorded (ConsentRecord.announcementPlayedAt set) before any caller-speech CallTurn is persisted. */
+export class ConsentNotRecordedError extends AppError {
+  constructor(callId: string) {
+    super("CONSENT_NOT_RECORDED", `Call ${callId} has no recorded consent announcement yet.`, {
+      httpStatus: 409,
+    });
+    this.name = "ConsentNotRecordedError";
+  }
+}
+
+export class RecordingNotFoundError extends AppError {
+  constructor(callId: string) {
+    super("RECORDING_NOT_FOUND", `Call ${callId} has no recording.`, { httpStatus: 404 });
+    this.name = "RecordingNotFoundError";
+  }
+}
+
+/** A10.2: thrown by the public recording-serving route when a signed URL's token fails HMAC verification or has expired. */
+export class SignedUrlInvalidError extends AppError {
+  constructor() {
+    super("SIGNED_URL_INVALID", "This recording link is invalid or has expired.", { httpStatus: 403 });
+    this.name = "SignedUrlInvalidError";
+  }
+}

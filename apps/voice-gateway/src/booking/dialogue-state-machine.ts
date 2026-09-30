@@ -10,6 +10,7 @@ import { withTenant } from "../common/prisma-client";
 import { evaluateConfidence } from "../dialogue/clarification";
 import { decideProviderFailureEscalation } from "../degradation/provider-failure";
 import { retrieveTopKnowledgeMatch } from "../knowledge/retrieval";
+import { recordCallTurn } from "../pipeline/transcript";
 import type { LanguageModelProvider } from "../providers/language-model.provider";
 import { classifySafety, type SafetyClassification } from "../safety/safety-classifier";
 import { containsClinicalContent } from "../safety/clinical-content-guard";
@@ -30,11 +31,13 @@ function withDefaultLanguage(language: KnowledgeLanguage | null): KnowledgeLangu
 }
 
 function conversationHistoryPlaceholder(): [] {
-  // Full multi-turn history isn't threaded through this call yet; each
-  // provider call is evaluated on the current turn's utterance alone.
-  // Sufficient for Module 7's state-machine mechanics — a real deployment
-  // would carry CallTurn rows here once Module 5's transcript persistence
-  // (out of this session's scope) exists.
+  // Full multi-turn history isn't threaded through provider calls yet;
+  // each is evaluated on the current turn's utterance alone. Module 10
+  // added CallTurn persistence (recordCallTurn, called from handleTurn
+  // below) so the rows this would read from now exist — reassembling them
+  // into LanguageModelInput.conversationHistory on every call is a
+  // follow-up, not required by any acceptance criterion this build has
+  // implemented.
   return [];
 }
 
@@ -56,13 +59,28 @@ export interface DialogueStateMachineDeps {
 export class DialogueStateMachine {
   constructor(private readonly deps: DialogueStateMachineDeps) {}
 
-  /** The assistant speaks first; call this once before any caller turn. */
-  start(): TurnResult {
+  /**
+   * A10.1: the assistant's very first utterance is the consent/recording
+   * announcement, and this is the only place that marks
+   * ConsentRecord.announcementPlayedAt. recordCallTurn (called from
+   * handleTurn for every subsequent turn) refuses to persist any
+   * caller-spoken text until that flag is set — so no caller speech can be
+   * retained before this announcement plays, by construction: a
+   * DialogueContext only ever comes from this method's own output or from
+   * a prior handleTurn call, tracing back to this one.
+   */
+  async start(): Promise<TurnResult> {
     const context = createInitialContext();
+    await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      tx.consentRecord.update({
+        where: { callId: this.deps.callId },
+        data: { announcementPlayedAt: new Date() },
+      }),
+    );
     return {
       context: { ...context, state: "LanguageDetection" },
       assistantText:
-        "Welcome. مرحبًا. You may speak in Arabic or English. بإمكانك التحدث بالعربية أو الإنجليزية.",
+        "This call may be recorded for quality and training purposes. Welcome — you may speak in Arabic or English. قد يتم تسجيل هذه المكالمة لأغراض الجودة والتدريب. مرحبًا، بإمكانك التحدث بالعربية أو الإنجليزية.",
       callShouldEnd: false,
       transferRequested: false,
     };
@@ -79,6 +97,38 @@ export class DialogueStateMachine {
 
     const contextAfterUtterance: DialogueContext = { ...context, consecutiveSilenceCount: 0 };
 
+    // A10.1: recorded before dispatch, so a caller's own words are never
+    // persisted ahead of the consent announcement that gates them.
+    await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      recordCallTurn(tx, {
+        callId: this.deps.callId,
+        speaker: "caller",
+        transcriptText: event.text,
+        detectedLanguage: event.language,
+        languageConfidence: event.confidence,
+      }),
+    );
+
+    const result = await this.dispatchTurn(context, contextAfterUtterance, event);
+
+    if (result.assistantText.length > 0) {
+      await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+        recordCallTurn(tx, {
+          callId: this.deps.callId,
+          speaker: "assistant",
+          transcriptText: result.assistantText,
+        }),
+      );
+    }
+
+    return result;
+  }
+
+  private async dispatchTurn(
+    originalContext: DialogueContext,
+    contextAfterUtterance: DialogueContext,
+    event: Extract<TurnEvent, { kind: "utterance" }>,
+  ): Promise<TurnResult> {
     // A9.1: evaluated on every caller turn, from every state — checked
     // ahead of the per-state dispatch below so an emergency mid-booking
     // (e.g. during SlotCollection) is caught exactly as reliably as one
@@ -110,7 +160,10 @@ export class DialogueStateMachine {
       // state machine) never surfaces as an unhandled rejection to the
       // caller; it always resolves to a transfer or a captured message.
       if (error instanceof ProviderFailureError || error instanceof ProviderTimeoutError) {
-        return this.handleProviderFailure(contextAfterUtterance, withDefaultLanguage(context.language));
+        return this.handleProviderFailure(
+          contextAfterUtterance,
+          withDefaultLanguage(originalContext.language),
+        );
       }
       throw error;
     }

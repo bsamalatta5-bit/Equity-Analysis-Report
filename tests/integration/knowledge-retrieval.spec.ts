@@ -337,6 +337,7 @@ describe("Knowledge retrieval (Module 8)", () => {
       const call = await migratorPrisma.call.create({
         data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
       });
+      await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
       return call.id;
     }
 
@@ -357,7 +358,7 @@ describe("Knowledge retrieval (Module 8)", () => {
 
     it("A8.3: answers a matched question with only the retrieved record's text — no invented or unrelated facts", async () => {
       const machine = newMachine(await createCall());
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
       expect(result.context.state).toBe("IntentCapture");
 
@@ -372,7 +373,7 @@ describe("Knowledge retrieval (Module 8)", () => {
 
     it("A8.2: a question with no matching knowledge record states the answer is unavailable and offers escalation, with no drafted (or invented) answer", async () => {
       const machine = newMachine(await createCall());
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
 
       result = await machine.handleTurn(

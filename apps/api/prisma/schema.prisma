@@ -440,6 +440,7 @@ model ConsentRecord {
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 /// Immutability grant: 20240101000400_audit_log_immutability revokes
 /// UPDATE and DELETE on this table from the voice_app application role.
+/// details: 20240104000100_audit_log_details adds this column.
 model AuditLog {
   id                 String             @id @default(uuid()) @db.Uuid
   tenantId           String             @db.Uuid
@@ -450,6 +451,10 @@ model AuditLog {
   entityId           String
   occurredAt         DateTime           @default(now()) @db.Timestamptz
   ipAddress          String?
+  /// A10.3: "an audit entry per deletion batch" — the retention job records
+  /// how many rows a batch deleted here. Optional for every other action;
+  /// existing callers (AuditService.record()) are unaffected.
+  details            Json?
 
   tenant    Tenant @relation(fields: [tenantId], references: [id])
   actorUser User?  @relation(fields: [actorUserId], references: [id])

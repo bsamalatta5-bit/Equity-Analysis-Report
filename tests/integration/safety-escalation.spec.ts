@@ -75,6 +75,7 @@ describe("Safety and escalation (Module 9)", () => {
       const call = await migratorPrisma.call.create({
         data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
       });
+      await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
       return call.id;
     }
 
@@ -96,7 +97,7 @@ describe("Safety and escalation (Module 9)", () => {
     it("an emergency phrase interrupts from IntentCapture and records disposition emergency_transfer", async () => {
       const callId = await createCall();
       const machine = newMachine(callId);
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
       expect(result.context.state).toBe("IntentCapture");
 
@@ -111,7 +112,7 @@ describe("Safety and escalation (Module 9)", () => {
     it("A9.1: an emergency phrase interrupts mid-booking (SlotCollection), not only during IntentCapture", async () => {
       const callId = await createCall();
       const machine = newMachine(callId);
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
       result = await machine.handleTurn(result.context, utterance("I would like to book an appointment"));
       expect(result.context.state).toBe("SlotCollection");
@@ -124,7 +125,7 @@ describe("Safety and escalation (Module 9)", () => {
     it("a clinical (non-life-threatening) request is treated identically to an emergency, per A9.3", async () => {
       const callId = await createCall();
       const machine = newMachine(callId);
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, utterance("hello"));
 
       result = await machine.handleTurn(
@@ -175,6 +176,7 @@ describe("Safety and escalation (Module 9)", () => {
         const call = await migratorPrisma.call.create({
           data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
         });
+        await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
         const machine = new DialogueStateMachine({
           languageModel: new FixtureLanguageModelProvider(),
           prisma: voiceGatewayPrisma,
@@ -184,7 +186,7 @@ describe("Safety and escalation (Module 9)", () => {
           contactPhoneE164: contact.phoneE164,
         });
 
-        let result = machine.start();
+        let result = await machine.start();
         result = await machine.handleTurn(result.context, {
           kind: "utterance",
           text: "hello",
@@ -332,6 +334,7 @@ describe("Safety and escalation (Module 9)", () => {
             startedAt: new Date(),
           },
         });
+        await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
         return call.id;
       }
 
@@ -354,7 +357,7 @@ describe("Safety and escalation (Module 9)", () => {
           callId,
           contactPhoneE164: "+966509999999",
         });
-        let result = machine.start();
+        let result = await machine.start();
         // handleLanguageDetection never calls the language model — the
         // failure surfaces on the first turn that reaches IntentCapture's
         // classifyIntent call.
@@ -405,7 +408,7 @@ describe("Safety and escalation (Module 9)", () => {
           callId,
           contactPhoneE164: "+966509999999",
         });
-        let result = machine.start();
+        let result = await machine.start();
         result = await machine.handleTurn(result.context, {
           kind: "utterance",
           text: "hello",
@@ -463,6 +466,7 @@ describe("Safety and escalation (Module 9)", () => {
       const call = await migratorPrisma.call.create({
         data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
       });
+      await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
       return call.id;
     }
 
@@ -476,7 +480,7 @@ describe("Safety and escalation (Module 9)", () => {
         callId,
         contactPhoneE164: "+966501212121",
       });
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, {
         kind: "utterance",
         text: "hello",
@@ -505,7 +509,7 @@ describe("Safety and escalation (Module 9)", () => {
         callId,
         contactPhoneE164: "+966501212122",
       });
-      let result = machine.start();
+      let result = await machine.start();
       result = await machine.handleTurn(result.context, {
         kind: "utterance",
         text: "hello",

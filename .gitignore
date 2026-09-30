@@ -16,3 +16,7 @@ playwright-report/
 test-results/
 .pnpm-store/
 dump.rdb
+
+# Module 10: RECORDING_STORAGE_DIR's default — local-disk stand-in for an
+# object store (see docs/adr/version-substitutions.md), never real content.
+var/

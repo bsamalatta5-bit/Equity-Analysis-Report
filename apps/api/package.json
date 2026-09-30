@@ -10,7 +10,8 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "test:unit": "vitest run --config vitest.unit.config.ts",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "retention": "ts-node --compiler-options {\"module\":\"CommonJS\"} src/retention/run-retention.ts"
   },
   "dependencies": {
     "@nestjs/common": "10.4.4",

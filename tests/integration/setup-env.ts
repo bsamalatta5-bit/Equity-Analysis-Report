@@ -10,6 +10,11 @@ const defaults: Record<string, string> = {
   ACCESS_TOKEN_TTL_SECONDS: "900",
   REFRESH_TOKEN_TTL_SECONDS: "604800",
   DASHBOARD_ORIGIN: "http://localhost:3000",
+  // Module 10 (A10.2): CallsService constructs its recording-storage config
+  // eagerly, so any test that bootstraps the full Nest app needs these set.
+  RECORDING_STORAGE_DIR: "./var/recordings-test",
+  RECORDING_ENCRYPTION_KEY: "qREEsStBMrJFvb5/8lAt0njtjKQoCBsdt+5LNd5FtKc=",
+  RECORDING_SIGNING_SECRET: "test-only-recording-signing-secret",
 };
 
 for (const [key, value] of Object.entries(defaults)) {

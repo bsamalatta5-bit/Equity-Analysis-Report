@@ -86,6 +86,7 @@ describe("DialogueStateMachine (Module 7)", () => {
     const call = await migratorPrisma.call.create({
       data: { tenantId, locationId, contactId: contact.id, direction: "inbound", startedAt: new Date() },
     });
+    await migratorPrisma.consentRecord.create({ data: { callId: call.id, recordingConsented: false } });
     return call.id;
   }
 
@@ -93,9 +94,9 @@ describe("DialogueStateMachine (Module 7)", () => {
     return { kind: "utterance", text, confidence, language };
   }
 
-  it("Greeting -> LanguageDetection: start() greets before any caller turn and moves to LanguageDetection", () => {
-    const machine = newMachine(randomUUID(), "+966500000000");
-    const result = machine.start();
+  it("Greeting -> LanguageDetection: start() greets before any caller turn and moves to LanguageDetection", async () => {
+    const machine = newMachine(await createCall(), "+966500000000");
+    const result = await machine.start();
     expect(result.context.state).toBe("LanguageDetection");
     expect(result.assistantText.length).toBeGreaterThan(0);
     expect(result.callShouldEnd).toBe(false);
@@ -104,7 +105,7 @@ describe("DialogueStateMachine (Module 7)", () => {
   it("full happy path: Greeting through Closure with a real confirmed voice_call appointment (A7.1)", async () => {
     const callId = await createCall();
     const machine = newMachine(callId, "+966501111111");
-    let result = machine.start();
+    let result = await machine.start();
     expect(result.context.state).toBe("LanguageDetection");
 
     result = await machine.handleTurn(result.context, utterance("hello"));
@@ -143,7 +144,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("A7.2: one low-confidence recognition triggers a single clarification, then proceeds normally", async () => {
     const machine = newMachine(await createCall(), "+966502222222");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hi"));
     expect(result.context.state).toBe("IntentCapture");
 
@@ -159,7 +160,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("A7.2: three consecutive low-confidence recognitions escalate instead of asking a third time", async () => {
     const machine = newMachine(await createCall(), "+966503333333");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hi"));
 
     result = await machine.handleTurn(result.context, utterance("mumble one", 0.2));
@@ -173,7 +174,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("Escalation: an explicit request to speak to a human routes straight to Escalation", async () => {
     const machine = newMachine(await createCall(), "+966504444444");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     result = await machine.handleTurn(result.context, utterance("can I talk to a human please"));
     expect(result.context.state).toBe("Escalation");
@@ -182,7 +183,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("EmergencyExit: an emergency keyword interrupts within the same turn and requests a transfer", async () => {
     const machine = newMachine(await createCall(), "+966505555555");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     expect(result.context.state).toBe("IntentCapture");
 
@@ -196,7 +197,7 @@ describe("DialogueStateMachine (Module 7)", () => {
     const callId = await createCall();
     const machine = newMachine(callId, "+966506666666");
 
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     result = await machine.handleTurn(result.context, utterance("book an appointment"));
     result = await machine.handleTurn(
@@ -240,7 +241,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("A7.4: one silence re-prompts; a second consecutive silence closes the call with a callback offer", async () => {
     const machine = newMachine(await createCall(), "+966508888888");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     expect(result.context.state).toBe("IntentCapture");
 
@@ -256,7 +257,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("A7.4: an utterance after a silence resets the silence counter", async () => {
     const machine = newMachine(await createCall(), "+966509999999");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     result = await machine.handleTurn(result.context, { kind: "silence" });
     expect(result.context.consecutiveSilenceCount).toBe(1);
@@ -268,7 +269,7 @@ describe("DialogueStateMachine (Module 7)", () => {
 
   it("SlotCollection: slots can be provided across multiple turns before advancing", async () => {
     const machine = newMachine(await createCall(), "+966510000000");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     result = await machine.handleTurn(result.context, utterance("book an appointment"));
     expect(result.context.state).toBe("SlotCollection");
@@ -288,7 +289,7 @@ describe("DialogueStateMachine (Module 7)", () => {
   it("Confirmation: declining the read-back escalates rather than booking anything", async () => {
     const callId = await createCall();
     const machine = newMachine(callId, "+966511111111");
-    let result = machine.start();
+    let result = await machine.start();
     result = await machine.handleTurn(result.context, utterance("hello"));
     result = await machine.handleTurn(result.context, utterance("book an appointment"));
     const startAt = new Date("2035-06-01T11:00:00.000Z");
