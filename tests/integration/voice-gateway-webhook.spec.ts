@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import Redis from "ioredis";
 import { PrismaClient } from "@prisma/client";
 import { createLogger } from "@voice-receptionist/logger";
-import { WebhookReplayDetectedError, WebhookSignatureInvalidError } from "@voice-receptionist/shared";
+import {
+  ConcurrencyLimitReachedError,
+  WebhookReplayDetectedError,
+  WebhookSignatureInvalidError,
+} from "@voice-receptionist/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { InMemoryNonceStore } from "../../apps/voice-gateway/src/providers/nonce-store";
 import {
@@ -16,7 +20,10 @@ import { migratorPrisma } from "./fixtures";
 
 const SECRET = "test-webhook-secret";
 
-function buildWebhookRequest(body: Record<string, unknown>, overrides: { nonce?: string; timestampSeconds?: number } = {}) {
+function buildWebhookRequest(
+  body: Record<string, unknown>,
+  overrides: { nonce?: string; timestampSeconds?: number } = {},
+) {
   const rawBody = JSON.stringify(body);
   const timestampSeconds = overrides.timestampSeconds ?? Math.floor(Date.now() / 1000);
   const nonce = overrides.nonce ?? randomUUID();
@@ -45,14 +52,25 @@ describe("TelephonyWebhookHandler (Module 5 core)", () => {
 
     const suffix = randomUUID().slice(0, 8);
     const tenant = await migratorPrisma.tenant.create({
-      data: { legalName: `WG Test ${suffix}`, commercialRegistration: `CR-${suffix}`, status: "active", planCode: "test" },
+      data: {
+        legalName: `WG Test ${suffix}`,
+        commercialRegistration: `CR-${suffix}`,
+        status: "active",
+        planCode: "test",
+      },
     });
     const location = await migratorPrisma.location.create({
       data: { tenantId: tenant.id, name: "Main", addressLine: "x", timezone: "Asia/Riyadh", active: true },
     });
     phoneNumberE164 = `+9665${Math.floor(10000000 + Math.random() * 89999999)}`;
     await migratorPrisma.phoneNumber.create({
-      data: { tenantId: tenant.id, locationId: location.id, e164Number: phoneNumberE164, providerReference: "test", status: "active" },
+      data: {
+        tenantId: tenant.id,
+        locationId: location.id,
+        e164Number: phoneNumberE164,
+        providerReference: "test",
+        status: "active",
+      },
     });
     tenantId = tenant.id;
     locationId = location.id;
@@ -90,7 +108,9 @@ describe("TelephonyWebhookHandler (Module 5 core)", () => {
     expect(call.locationId).toBe(locationId);
     expect(call.endedAt).toBeNull();
 
-    const consent = await migratorPrisma.consentRecord.findUniqueOrThrow({ where: { callId: result.callId } });
+    const consent = await migratorPrisma.consentRecord.findUniqueOrThrow({
+      where: { callId: result.callId },
+    });
     expect(consent.recordingConsented).toBe(false);
     expect(consent.announcementPlayedAt).toBeNull();
   });
@@ -134,6 +154,36 @@ describe("TelephonyWebhookHandler (Module 5 core)", () => {
     expect(await sessionStore.get(callReference)).toBeNull();
   });
 
+  it("A11.1: call-end accumulates billable minutes into UsageRecord for the current period", async () => {
+    const callReference = randomUUID();
+    const startRequest = buildWebhookRequest({
+      callReference,
+      fromE164: "+966500000007",
+      toE164: phoneNumberE164,
+      eventType: "call-start",
+    });
+    await handler.handle(startRequest, "203.0.113.10");
+
+    const periodStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+    const before = await migratorPrisma.usageRecord.findUnique({
+      where: { tenantId_periodStart: { tenantId, periodStart } },
+    });
+
+    const endRequest = buildWebhookRequest({
+      callReference,
+      fromE164: "+966500000007",
+      toE164: phoneNumberE164,
+      eventType: "call-end",
+    });
+    await handler.handle(endRequest, "203.0.113.10");
+
+    const after = await migratorPrisma.usageRecord.findUniqueOrThrow({
+      where: { tenantId_periodStart: { tenantId, periodStart } },
+    });
+    // A near-instant test call still bills at least 1 minute (A11.1's rounding rule).
+    expect(after.billableMinutes).toBeGreaterThanOrEqual((before?.billableMinutes ?? 0) + 1);
+  });
+
   it("A5.1: an invalid signature is rejected and creates no Call row", async () => {
     const callCountBefore = await migratorPrisma.call.count({ where: { tenantId } });
 
@@ -146,7 +196,9 @@ describe("TelephonyWebhookHandler (Module 5 core)", () => {
     });
     request.headers["x-webhook-signature"] = "0".repeat(64);
 
-    await expect(handler.handle(request, "203.0.113.10")).rejects.toBeInstanceOf(WebhookSignatureInvalidError);
+    await expect(handler.handle(request, "203.0.113.10")).rejects.toBeInstanceOf(
+      WebhookSignatureInvalidError,
+    );
 
     const callCountAfter = await migratorPrisma.call.count({ where: { tenantId } });
     expect(callCountAfter).toBe(callCountBefore);
@@ -183,5 +235,91 @@ describe("TelephonyWebhookHandler (Module 5 core)", () => {
     });
     await expect(handler.handle(request, "203.0.113.10")).rejects.toThrow();
     expect(await sessionStore.get(callReference)).toBeNull();
+  });
+
+  it("A11.2: a call above the tenant's concurrent call ceiling is rejected, creating no Call row", async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const limitedTenant = await migratorPrisma.tenant.create({
+      data: {
+        legalName: `Concurrency Test ${suffix}`,
+        commercialRegistration: `CR-${suffix}`,
+        status: "active",
+        planCode: "test",
+      },
+    });
+    const limitedLocation = await migratorPrisma.location.create({
+      data: {
+        tenantId: limitedTenant.id,
+        name: "Main",
+        addressLine: "x",
+        timezone: "Asia/Riyadh",
+        active: true,
+      },
+    });
+    const limitedPhoneE164 = `+9665${Math.floor(10000000 + Math.random() * 89999999)}`;
+    await migratorPrisma.phoneNumber.create({
+      data: {
+        tenantId: limitedTenant.id,
+        locationId: limitedLocation.id,
+        e164Number: limitedPhoneE164,
+        providerReference: "test",
+        status: "active",
+      },
+    });
+    await migratorPrisma.subscription.create({
+      data: {
+        tenantId: limitedTenant.id,
+        planCode: "test",
+        includedMinutes: 1000,
+        periodStart: new Date("2030-01-01T00:00:00.000Z"),
+        periodEnd: new Date("2030-02-01T00:00:00.000Z"),
+        status: "active",
+        concurrentCallLimit: 2,
+      },
+    });
+
+    const callReferences = [randomUUID(), randomUUID()];
+    for (const callReference of callReferences) {
+      const request = buildWebhookRequest({
+        callReference,
+        fromE164: "+966500000010",
+        toE164: limitedPhoneE164,
+        eventType: "call-start",
+      });
+      await handler.handle(request, "203.0.113.10");
+    }
+
+    const callCountBefore = await migratorPrisma.call.count({ where: { tenantId: limitedTenant.id } });
+    const thirdCallReference = randomUUID();
+    const thirdRequest = buildWebhookRequest({
+      callReference: thirdCallReference,
+      fromE164: "+966500000011",
+      toE164: limitedPhoneE164,
+      eventType: "call-start",
+    });
+    await expect(handler.handle(thirdRequest, "203.0.113.10")).rejects.toBeInstanceOf(
+      ConcurrencyLimitReachedError,
+    );
+
+    const callCountAfter = await migratorPrisma.call.count({ where: { tenantId: limitedTenant.id } });
+    expect(callCountAfter).toBe(callCountBefore);
+    expect(await sessionStore.get(thirdCallReference)).toBeNull();
+
+    // Ending one of the two active calls frees a slot for the next caller.
+    const endRequest = buildWebhookRequest({
+      callReference: callReferences[0]!,
+      fromE164: "+966500000010",
+      toE164: limitedPhoneE164,
+      eventType: "call-end",
+    });
+    await handler.handle(endRequest, "203.0.113.10");
+
+    const fourthRequest = buildWebhookRequest({
+      callReference: randomUUID(),
+      fromE164: "+966500000012",
+      toE164: limitedPhoneE164,
+      eventType: "call-start",
+    });
+    await expect(handler.handle(fourthRequest, "203.0.113.10")).resolves.toBeDefined();
   });
 });

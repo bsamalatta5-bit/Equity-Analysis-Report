@@ -18,6 +18,10 @@ function sessionKey(callReference: string): string {
   return `call-session:${callReference}`;
 }
 
+function activeCallsKey(tenantId: string): string {
+  return `active-calls:${tenantId}`;
+}
+
 /**
  * A5.5: "Session state survives a gateway process restart within a live
  * call." All state lives in Redis, never in this process's memory, so any
@@ -33,8 +37,25 @@ export class CallSessionStore {
     private readonly ttlSeconds: number = DEFAULT_TTL_SECONDS,
   ) {}
 
+  /**
+   * A11.2: also records this call in its tenant's active-call set, so
+   * countActiveForTenant() can enforce the concurrent call ceiling without
+   * scanning every session key. The set's own TTL is refreshed on every
+   * create() (SADD doesn't reset TTL on its own); EXPIRE bounds how long a
+   * crashed process's stale entry can inflate the count to at most
+   * ttlSeconds — the same bound an orphaned session key is already
+   * subject to.
+   */
   async create(callReference: string, state: CallSessionState): Promise<void> {
-    await this.redis.set(sessionKey(callReference), JSON.stringify(state), "EX", this.ttlSeconds);
+    const multi = this.redis.multi();
+    multi.set(sessionKey(callReference), JSON.stringify(state), "EX", this.ttlSeconds);
+    multi.sadd(activeCallsKey(state.tenantId), callReference);
+    multi.expire(activeCallsKey(state.tenantId), this.ttlSeconds);
+    await multi.exec();
+  }
+
+  async countActiveForTenant(tenantId: string): Promise<number> {
+    return this.redis.scard(activeCallsKey(tenantId));
   }
 
   async get(callReference: string): Promise<CallSessionState | null> {
@@ -67,6 +88,10 @@ export class CallSessionStore {
   }
 
   async delete(callReference: string): Promise<void> {
+    const existing = await this.get(callReference);
     await this.redis.del(sessionKey(callReference));
+    if (existing) {
+      await this.redis.srem(activeCallsKey(existing.tenantId), callReference);
+    }
   }
 }

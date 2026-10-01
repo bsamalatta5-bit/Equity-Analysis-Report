@@ -111,6 +111,17 @@ export class WebhookReplayDetectedError extends AppError {
   }
 }
 
+/** A11.2: thrown before any Call row is created, mirroring WebhookSignatureInvalidError/WebhookReplayDetectedError's "a rejected webhook creates no call record." */
+export class ConcurrencyLimitReachedError extends AppError {
+  constructor(busyMessage: string) {
+    super("CONCURRENCY_LIMIT_REACHED", "This tenant's concurrent call limit has been reached.", {
+      httpStatus: 429,
+      details: { busyMessage },
+    });
+    this.name = "ConcurrencyLimitReachedError";
+  }
+}
+
 export class ProviderTimeoutError extends AppError {
   constructor(providerName: string, operationName: string) {
     super("PROVIDER_TIMEOUT", `${providerName} timed out during ${operationName}.`, { httpStatus: 504 });

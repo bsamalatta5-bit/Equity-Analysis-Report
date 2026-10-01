@@ -44,6 +44,8 @@ enum CallDisposition {
   message_captured
   emergency_transfer
   provider_failure
+  /// Module 11 (A11.3): 20240105000100_usage_spend_controls adds this value.
+  spend_limit_suspended
 }
 
 enum CallDirection {
@@ -114,51 +116,51 @@ enum ActorPrincipalType {
 /// policy predicate: id = current_setting('app.current_tenant_id')::uuid
 model Tenant {
   id                     String       @id @default(uuid()) @db.Uuid
-  legalName               String
+  legalName              String
   commercialRegistration String
   status                 TenantStatus @default(active)
   planCode               String
   createdAt              DateTime     @default(now()) @db.Timestamptz
 
-  locations     Location[]
-  phoneNumbers  PhoneNumber[]
-  users         User[]
-  contacts      Contact[]
-  calls         Call[]
+  locations      Location[]
+  phoneNumbers   PhoneNumber[]
+  users          User[]
+  contacts       Contact[]
+  calls          Call[]
   knowledgeItems KnowledgeItem[]
-  auditLogs     AuditLog[]
-  subscriptions Subscription[]
-  usageRecords  UsageRecord[]
+  auditLogs      AuditLog[]
+  subscriptions  Subscription[]
+  usageRecords   UsageRecord[]
 }
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 model Location {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  tenantId    String  @db.Uuid
   name        String
   addressLine String
   timezone    String
-  active      Boolean  @default(true)
+  active      Boolean @default(true)
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
-  phoneNumbers  PhoneNumber[]
-  services      Service[]
-  staffMembers  StaffMember[]
-  appointments  Appointment[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  phoneNumbers    PhoneNumber[]
+  services        Service[]
+  staffMembers    StaffMember[]
+  appointments    Appointment[]
   escalationRules EscalationRule[]
-  calls         Call[]
+  calls           Call[]
 
   @@index([tenantId])
 }
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 model PhoneNumber {
-  id                 String            @id @default(uuid()) @db.Uuid
-  tenantId           String            @db.Uuid
-  locationId         String            @db.Uuid
-  e164Number         String            @unique
-  providerReference  String
-  status             PhoneNumberStatus @default(provisioning)
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @db.Uuid
+  locationId        String            @db.Uuid
+  e164Number        String            @unique
+  providerReference String
+  status            PhoneNumberStatus @default(provisioning)
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
   location Location @relation(fields: [locationId], references: [id])
@@ -169,21 +171,21 @@ model PhoneNumber {
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 model User {
-  id              String     @id @default(uuid()) @db.Uuid
-  tenantId        String     @db.Uuid
-  email           String     @unique
-  passwordHash    String
-  role            UserRole
-  status          UserStatus @default(pending_totp_enrollment)
-  totpSecret      String?
-  totpEnrolledAt  DateTime? @db.Timestamptz
-  failedAttempts  Int        @default(0)
-  lockedUntil     DateTime? @db.Timestamptz
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @db.Uuid
+  email          String     @unique
+  passwordHash   String
+  role           UserRole
+  status         UserStatus @default(pending_totp_enrollment)
+  totpSecret     String?
+  totpEnrolledAt DateTime?  @db.Timestamptz
+  failedAttempts Int        @default(0)
+  lockedUntil    DateTime?  @db.Timestamptz
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  assignedLocations UserLocation[]
+  tenant               Tenant               @relation(fields: [tenantId], references: [id])
+  assignedLocations    UserLocation[]
   refreshTokenFamilies RefreshTokenFamily[]
-  auditLogs        AuditLog[]
+  auditLogs            AuditLog[]
 
   @@index([tenantId])
 }
@@ -208,24 +210,24 @@ model UserLocation {
 /// in plaintext, and are treated as sensitive by the logger redaction layer
 /// (key name matches the `token` pattern).
 model RefreshTokenFamily {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @db.Uuid
-  revokedAt   DateTime? @db.Timestamptz
-  createdAt   DateTime  @default(now()) @db.Timestamptz
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  revokedAt DateTime? @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
 
-  user   User            @relation(fields: [userId], references: [id])
+  user   User           @relation(fields: [userId], references: [id])
   tokens RefreshToken[]
 
   @@index([userId])
 }
 
 model RefreshToken {
-  id          String    @id @default(uuid()) @db.Uuid
-  familyId    String    @db.Uuid
-  tokenHash   String    @unique
-  issuedAt    DateTime  @default(now()) @db.Timestamptz
-  expiresAt   DateTime @db.Timestamptz
-  consumedAt  DateTime? @db.Timestamptz
+  id         String    @id @default(uuid()) @db.Uuid
+  familyId   String    @db.Uuid
+  tokenHash  String    @unique
+  issuedAt   DateTime  @default(now()) @db.Timestamptz
+  expiresAt  DateTime  @db.Timestamptz
+  consumedAt DateTime? @db.Timestamptz
 
   family RefreshTokenFamily @relation(fields: [familyId], references: [id])
 
@@ -243,10 +245,10 @@ model StaffMember {
   displayName String
   active      Boolean @default(true)
 
-  location           Location            @relation(fields: [locationId], references: [id])
-  availabilityRules  AvailabilityRule[]
-  blockedPeriods     BlockedPeriod[]
-  appointments       Appointment[]
+  location          Location           @relation(fields: [locationId], references: [id])
+  availabilityRules AvailabilityRule[]
+  blockedPeriods    BlockedPeriod[]
+  appointments      Appointment[]
 
   @@index([locationId])
 }
@@ -323,8 +325,8 @@ model Appointment {
   staffMemberId String            @db.Uuid
   serviceId     String            @db.Uuid
   contactId     String            @db.Uuid
-  startAt       DateTime @db.Timestamptz
-  endAt         DateTime @db.Timestamptz
+  startAt       DateTime          @db.Timestamptz
+  endAt         DateTime          @db.Timestamptz
   status        AppointmentStatus @default(pending)
   source        AppointmentSource
   callId        String?           @db.Uuid
@@ -350,21 +352,21 @@ model Appointment {
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 model Call {
-  id                  String          @id @default(uuid()) @db.Uuid
-  tenantId            String          @db.Uuid
-  locationId          String          @db.Uuid
-  contactId           String?         @db.Uuid
-  direction           CallDirection   @default(inbound)
-  startedAt           DateTime @db.Timestamptz
-  endedAt             DateTime? @db.Timestamptz
-  disposition         CallDisposition?
-  containmentFlag     Boolean         @default(false)
-  recordingObjectKey  String?
-  recordingExpiresAt  DateTime? @db.Timestamptz
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @db.Uuid
+  locationId         String           @db.Uuid
+  contactId          String?          @db.Uuid
+  direction          CallDirection    @default(inbound)
+  startedAt          DateTime         @db.Timestamptz
+  endedAt            DateTime?        @db.Timestamptz
+  disposition        CallDisposition?
+  containmentFlag    Boolean          @default(false)
+  recordingObjectKey String?
+  recordingExpiresAt DateTime?        @db.Timestamptz
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
-  location      Location        @relation(fields: [locationId], references: [id])
-  contact       Contact?        @relation(fields: [contactId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  location      Location       @relation(fields: [locationId], references: [id])
+  contact       Contact?       @relation(fields: [contactId], references: [id])
   turns         CallTurn[]
   appointments  Appointment[]
   consentRecord ConsentRecord?
@@ -377,16 +379,16 @@ model Call {
 
 /// Row-level security: 20240102000100_row_level_security, policy joins through Call.
 model CallTurn {
-  id                  String          @id @default(uuid()) @db.Uuid
-  callId              String          @db.Uuid
-  sequence            Int
-  speaker             CallTurnSpeaker
-  transcriptText      String
-  detectedLanguage    KnowledgeLanguage?
-  languageConfidence  Float?
-  intent              String?
-  confidence          Float?
-  latencyMs           Int?
+  id                 String             @id @default(uuid()) @db.Uuid
+  callId             String             @db.Uuid
+  sequence           Int
+  speaker            CallTurnSpeaker
+  transcriptText     String
+  detectedLanguage   KnowledgeLanguage?
+  languageConfidence Float?
+  intent             String?
+  confidence         Float?
+  latencyMs          Int?
 
   call Call @relation(fields: [callId], references: [id])
 
@@ -397,13 +399,13 @@ model CallTurn {
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 /// pgvector extension and similarity index: 20240101000300_knowledge_vector_index.
 model KnowledgeItem {
-  id           String            @id @default(uuid()) @db.Uuid
-  tenantId     String            @db.Uuid
+  id           String                      @id @default(uuid()) @db.Uuid
+  tenantId     String                      @db.Uuid
   questionText String
   answerText   String
   language     KnowledgeLanguage
   embedding    Unsupported("vector(1536)")
-  active       Boolean           @default(true)
+  active       Boolean                     @default(true)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -463,14 +465,24 @@ model AuditLog {
 }
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
+/// concurrentCallLimit/costPerBillableMinuteCents/monthlySpendCapCents/spendCapBreachedAt:
+/// 20240105000100_usage_spend_controls adds these columns (Module 11, A11.2/A11.3).
 model Subscription {
-  id              String             @id @default(uuid()) @db.Uuid
-  tenantId        String             @db.Uuid
-  planCode        String
-  includedMinutes Int
-  periodStart     DateTime @db.Timestamptz
-  periodEnd       DateTime @db.Timestamptz
-  status          SubscriptionStatus @default(active)
+  id                         String             @id @default(uuid()) @db.Uuid
+  tenantId                   String             @db.Uuid
+  planCode                   String
+  includedMinutes            Int
+  periodStart                DateTime           @db.Timestamptz
+  periodEnd                  DateTime           @db.Timestamptz
+  status                     SubscriptionStatus @default(active)
+  /// A11.2: a per-tenant concurrent call ceiling.
+  concurrentCallLimit        Int                @default(5)
+  /// A11.3: no real vendor's rate — a plan-level cost figure configured at subscription setup, vendor-agnostic.
+  costPerBillableMinuteCents Int                @default(0)
+  /// A11.3: null means no spend cap is configured for this subscription (the breaker never trips).
+  monthlySpendCapCents       Int?
+  /// A11.3: set once, the first time this period's accumulated spend crosses monthlySpendCapCents.
+  spendCapBreachedAt         DateTime?          @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -479,11 +491,11 @@ model Subscription {
 
 /// Row-level security: 20240102000100_row_level_security, direct tenantId policy.
 model UsageRecord {
-  id               String   @id @default(uuid()) @db.Uuid
-  tenantId         String   @db.Uuid
-  periodStart      DateTime @db.Timestamptz
-  billableMinutes  Int      @default(0)
-  overageMinutes   Int      @default(0)
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  periodStart     DateTime @db.Timestamptz
+  billableMinutes Int      @default(0)
+  overageMinutes  Int      @default(0)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

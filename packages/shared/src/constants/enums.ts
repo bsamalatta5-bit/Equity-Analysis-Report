@@ -1,10 +1,4 @@
-export const APPOINTMENT_STATUS = [
-  "pending",
-  "confirmed",
-  "cancelled",
-  "completed",
-  "no_show",
-] as const;
+export const APPOINTMENT_STATUS = ["pending", "confirmed", "cancelled", "completed", "no_show"] as const;
 export type AppointmentStatus = (typeof APPOINTMENT_STATUS)[number];
 
 export const APPOINTMENT_SOURCE = ["voice_call", "dashboard", "import"] as const;
@@ -17,6 +11,7 @@ export const CALL_DISPOSITION = [
   "message_captured",
   "emergency_transfer",
   "provider_failure",
+  "spend_limit_suspended",
 ] as const;
 export type CallDisposition = (typeof CALL_DISPOSITION)[number];
 
@@ -58,5 +53,10 @@ export const ESCALATION_TRIGGER_TYPE = [
 ] as const;
 export type EscalationTriggerType = (typeof ESCALATION_TRIGGER_TYPE)[number];
 
-export const ACTOR_PRINCIPAL_TYPE = ["human_user", "voice_gateway", "retention_job", "telephony_partner"] as const;
+export const ACTOR_PRINCIPAL_TYPE = [
+  "human_user",
+  "voice_gateway",
+  "retention_job",
+  "telephony_partner",
+] as const;
 export type ActorPrincipalType = (typeof ACTOR_PRINCIPAL_TYPE)[number];

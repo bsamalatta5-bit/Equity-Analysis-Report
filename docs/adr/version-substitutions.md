@@ -104,6 +104,20 @@ point at instead of local disk.
   stack; a real deployment would provision that dedicated role in
   Terraform (Module 13) rather than reuse the migrator connection.
 
+## No payment/billing vendor pinned (Module 11)
+
+Section 3 pins no payment processor or billing platform (Stripe or
+otherwise), and A11.1-A11.3's acceptance criteria never ask for a real
+charge to be made — only that billable minutes accumulate correctly, that
+a concurrent-call ceiling is enforced, and that a monthly spend figure
+computed from accumulated usage trips a circuit breaker. `Subscription
+.costPerBillableMinuteCents`/`monthlySpendCapCents` and
+`UsageRecord.billableMinutes` are therefore plain internal integer cents
+columns with no external billing side effect — nothing here charges a
+card or calls a payment API. Wiring actual invoicing/payment capture
+against these numbers is a Module 13 (Delivery Infrastructure) /
+deployment-time concern, not a gap introduced by this session.
+
 ## What was verified
 
 `pnpm install` (no `--force`/`--legacy-peer-deps`) resolved every declared

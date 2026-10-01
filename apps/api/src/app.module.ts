@@ -20,6 +20,7 @@ import { AppointmentsModule } from "./appointments/appointments.module";
 import { KnowledgeModule } from "./knowledge/knowledge.module";
 import { EscalationModule } from "./escalation/escalation.module";
 import { CallsModule } from "./calls/calls.module";
+import { UsageModule } from "./usage/usage.module";
 import { AuditModule } from "./audit/audit.module";
 
 @Module({
@@ -39,6 +40,7 @@ import { AuditModule } from "./audit/audit.module";
     KnowledgeModule,
     EscalationModule,
     CallsModule,
+    UsageModule,
   ],
   providers: [
     // Order matters: SessionGuard establishes request.principal, RolesGuard

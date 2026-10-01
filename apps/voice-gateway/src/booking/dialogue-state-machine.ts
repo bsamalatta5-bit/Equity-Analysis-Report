@@ -9,6 +9,7 @@ import {
 import { withTenant } from "../common/prisma-client";
 import { evaluateConfidence } from "../dialogue/clarification";
 import { decideProviderFailureEscalation } from "../degradation/provider-failure";
+import { checkSpendCircuitBreaker } from "../degradation/spend-circuit-breaker";
 import { retrieveTopKnowledgeMatch } from "../knowledge/retrieval";
 import { recordCallTurn } from "../pipeline/transcript";
 import type { LanguageModelProvider } from "../providers/language-model.provider";
@@ -71,6 +72,18 @@ export class DialogueStateMachine {
    */
   async start(): Promise<TurnResult> {
     const context = createInitialContext();
+
+    // A11.3: checked before anything else in the call, including the
+    // consent announcement — a suspended call never reaches a provider,
+    // and never collects caller speech to retain, so there is nothing for
+    // A10.1's consent gate to protect here.
+    const spendCheck = await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      checkSpendCircuitBreaker(tx, this.deps.tenantId, new Date()),
+    );
+    if (spendCheck.breached) {
+      return this.handleSpendLimitSuspended(context);
+    }
+
     await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
       tx.consentRecord.update({
         where: { callId: this.deps.callId },
@@ -82,6 +95,35 @@ export class DialogueStateMachine {
       assistantText:
         "This call may be recorded for quality and training purposes. Welcome — you may speak in Arabic or English. قد يتم تسجيل هذه المكالمة لأغراض الجودة والتدريب. مرحبًا، بإمكانك التحدث بالعربية أو الإنجليزية.",
       callShouldEnd: false,
+      transferRequested: false,
+    };
+  }
+
+  /** A11.3. */
+  private async handleSpendLimitSuspended(context: DialogueContext): Promise<TurnResult> {
+    const decision = await withTenant(this.deps.prisma, this.deps.tenantId, (tx) =>
+      decideProviderFailureEscalation(tx, { locationId: this.deps.locationId, now: new Date() }),
+    );
+
+    if (decision.kind === "transfer") {
+      await this.recordDisposition("spend_limit_suspended");
+      return {
+        context: { ...context, state: "Escalation" },
+        assistantText:
+          "We're unable to continue this call automatically right now. Transferring you to our team. " +
+          "لا يمكننا متابعة هذه المكالمة آليًا حاليًا. سيتم تحويلك إلى فريقنا.",
+        callShouldEnd: false,
+        transferRequested: true,
+      };
+    }
+
+    await this.recordDisposition("spend_limit_suspended");
+    return {
+      context: { ...context, state: "Closure" },
+      assistantText:
+        "We're unable to continue this call automatically right now, and our team is unavailable. We'll call you back soon. " +
+        "لا يمكننا متابعة هذه المكالمة آليًا حاليًا، وفريقنا غير متاح. سنتصل بك قريبًا.",
+      callShouldEnd: true,
       transferRequested: false,
     };
   }

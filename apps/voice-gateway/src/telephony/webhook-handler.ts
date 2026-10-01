@@ -5,6 +5,8 @@ import { resolveTenantForPhoneNumber, withTenant } from "../common/prisma-client
 import type { TelephonyProvider } from "../providers/telephony.provider";
 import type { TelephonyWebhookRequest } from "../providers/types";
 import type { CallSessionStore } from "../session/call-session-store";
+import { checkConcurrencyLimit } from "../usage/concurrency-guard";
+import { recordCallUsage } from "../usage/usage-accounting";
 import type { TelephonyWebhookRateLimiter } from "./webhook-rate-limit";
 
 export interface WebhookHandlerResult {
@@ -17,7 +19,9 @@ export interface WebhookHandlerResult {
  * creates the Call and ConsentRecord rows (A5.3), then initializes
  * Redis-backed session state (A5.5). A verification failure never reaches
  * this far: verifyWebhook throws before any of the above runs, so an
- * unauthenticated or replayed webhook creates no call record.
+ * unauthenticated or replayed webhook creates no call record — neither
+ * does a call over the tenant's concurrent call ceiling (A11.2, Module
+ * 11). Call-end accumulates this call's billable minutes (A11.1).
  */
 export class TelephonyWebhookHandler {
   constructor(
@@ -51,6 +55,13 @@ export class TelephonyWebhookHandler {
       throw new NotFoundError("PhoneNumber", toE164);
     }
 
+    // A11.2: checked before any Call row is created — the same "a
+    // rejected call creates no record" precedent A5.1's signature/replay
+    // checks already establish. Throws ConcurrencyLimitReachedError.
+    await withTenant(this.prisma, resolved.tenantId, (tx) =>
+      checkConcurrencyLimit(tx, this.sessionStore, resolved.tenantId),
+    );
+
     const callId = await withTenant(this.prisma, resolved.tenantId, async (tx) => {
       const call = await tx.call.create({
         data: {
@@ -60,9 +71,9 @@ export class TelephonyWebhookHandler {
           startedAt: new Date(),
         },
       });
-      // A5.3: the consent record exists before the first assistant
-      // utterance. announcementPlayedAt stays null until the dialogue
-      // flow (Module 7, not built this session) actually plays it.
+      // A5.3/A10.1: the consent record exists before the first assistant
+      // utterance. announcementPlayedAt stays null until
+      // DialogueStateMachine.start() (Module 10) actually plays it.
       await tx.consentRecord.create({
         data: { callId: call.id, recordingConsented: false },
       });
@@ -88,9 +99,12 @@ export class TelephonyWebhookHandler {
       throw new NotFoundError("CallSession", callReference);
     }
 
-    await withTenant(this.prisma, session.tenantId, (tx) =>
-      tx.call.update({ where: { id: session.callId }, data: { endedAt: new Date() } }),
-    );
+    await withTenant(this.prisma, session.tenantId, async (tx) => {
+      const endedAt = new Date();
+      const call = await tx.call.update({ where: { id: session.callId }, data: { endedAt } });
+      // A11.1: accumulated in the same transaction that closes the call.
+      await recordCallUsage(tx, { tenantId: session.tenantId, startedAt: call.startedAt, endedAt });
+    });
     await this.sessionStore.delete(callReference);
 
     this.logger.info({ callId: session.callId }, "Call ended");
