@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Body, Controller, HttpCode, Ip, Patch, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Ip, Patch, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   changePasswordRequestSchema,
@@ -60,7 +60,9 @@ export class AuthController {
   @HttpCode(200)
   async startEnrollment(
     @Body(new ZodValidationPipe(totpVerifyRequestSchema.pick({ challengeToken: true })))
-    body: { challengeToken: string },
+    body: {
+      challengeToken: string;
+    },
   ): Promise<{ secret: string; otpauthUri: string }> {
     return this.auth.startTotpEnrollment(body.challengeToken);
   }
@@ -110,6 +112,29 @@ export class AuthController {
     return { status: "ok" };
   }
 
+  /**
+   * Module 12: the dashboard has no other way to learn which tenant and
+   * role its own session cookie resolves to (every other route is scoped
+   * under /tenants/:tenantId, which the dashboard cannot address without
+   * this). Returns exactly the fields already on HumanPrincipal — no new
+   * data access, just exposing what SessionGuard already resolved.
+   */
+  @Get("session")
+  @HttpCode(200)
+  getSession(@CurrentHumanPrincipal() principal: HumanPrincipal): {
+    userId: string;
+    tenantId: string;
+    role: HumanPrincipal["role"];
+    assignedLocationIds: readonly string[];
+  } {
+    return {
+      userId: principal.userId,
+      tenantId: principal.tenantId,
+      role: principal.role,
+      assignedLocationIds: principal.assignedLocationIds,
+    };
+  }
+
   @Patch("password")
   @HttpCode(200)
   async changePassword(
@@ -117,7 +142,12 @@ export class AuthController {
     @Body(new ZodValidationPipe(changePasswordRequestSchema))
     body: { currentPassword: string; newPassword: string },
   ): Promise<{ status: "ok" }> {
-    await this.auth.changePassword(principal.userId, principal.tenantId, body.currentPassword, body.newPassword);
+    await this.auth.changePassword(
+      principal.userId,
+      principal.tenantId,
+      body.currentPassword,
+      body.newPassword,
+    );
     return { status: "ok" };
   }
 }
