@@ -4,8 +4,8 @@ import { forwardRef, useId, type InputHTMLAttributes } from "react";
 
 export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
-  error?: string;
-  hint?: string;
+  error?: string | undefined;
+  hint?: string | undefined;
 }
 
 /** A12.8(d): the error, when present, is announced (role="alert") and reachable from the field (aria-describedby). */

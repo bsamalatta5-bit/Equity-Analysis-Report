@@ -1,12 +1,11 @@
-"use client";
+import { notFound } from "next/navigation";
+import { isLocale } from "../../lib/i18n/locales";
+import { HomeShell } from "./HomeShell";
 
-import { useI18n } from "../../lib/i18n/provider";
-
-export default function LocaleHomePage() {
-  const { t } = useI18n();
-  return (
-    <main id="main-content" className="flex min-h-screen items-center justify-center p-token-8">
-      <h1 className="text-xl font-semibold text-text-primary">{t("common.appName")}</h1>
-    </main>
-  );
+export default async function LocaleHomePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  if (!isLocale(locale)) {
+    notFound();
+  }
+  return <HomeShell locale={locale} />;
 }

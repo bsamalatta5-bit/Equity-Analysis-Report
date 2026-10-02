@@ -1,12 +1,27 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { I18nProvider } from "../../lib/i18n/provider";
 import { isLocale, LOCALES, dirFor, type Locale } from "../../lib/i18n/locales";
 import { QueryProvider } from "../../lib/query-provider";
+import { ar } from "../../lib/i18n/messages/ar";
+import { en } from "../../lib/i18n/messages/en";
 import "../../styles/globals.css";
 
 export function generateStaticParams() {
   return LOCALES.map((locale) => ({ locale }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const appName = locale === "ar" ? ar.common.appName : en.common.appName;
+  return {
+    title: { default: appName, template: `%s · ${appName}` },
+  };
 }
 
 export default async function LocaleLayout({

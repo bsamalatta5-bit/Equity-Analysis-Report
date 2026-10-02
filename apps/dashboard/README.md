@@ -38,9 +38,45 @@ immediately after a successful sign-in without first learning its own
 `tenantId` from somewhere — this is that somewhere, and it exposes no
 field `SessionGuard` didn't already resolve.
 
+### Auth and onboarding screens
+
+- **Session Sign-In** (`src/app/[locale]/sign-in`) — email/password against
+  `POST /auth/login`, routing to `/verify` when the response is
+  `totp_required` or `totp_enrollment_required`, straight home on a bare
+  `session` result.
+- **Second Factor Verification** (`src/app/[locale]/verify`) — one screen
+  covering both the already-enrolled (enter a code) and first-time
+  (show the secret, then enter a code) paths, since both are the same
+  "prove you hold the authenticator" step with a different lead-in.
+- **Tenant Onboarding Wizard** (`src/app/[locale]/onboarding`,
+  `tenant_owner`-only, matching `POST /tenants/:id/locations`'s own RBAC) —
+  four steps composing the already-built location/service/staff/phone-number
+  endpoints (location → service → staff → phone number), not a new
+  tenant-signup flow; nothing in Section 5's data model or any built module
+  exposes self-serve tenant registration.
+- `src/components/auth/AuthGuard.tsx` — every authenticated screen's
+  `GET /auth/session` check, loading/error/offline state included, with an
+  unauthenticated response redirecting to sign-in instead of rendering as
+  an error.
+- `src/app/[locale]/HomeShell.tsx` — a minimal authenticated home (role,
+  sign-out, a link to onboarding for owners) standing in for Operations
+  Overview until that screen is built.
+
+Verified end-to-end in `tests/e2e/auth.spec.ts` against real production
+builds of both `apps/dashboard` and `apps/api` and real Postgres/Redis: a
+real TOTP code computed with `otplib` against both an already-enrolled and
+a freshly-enrolled secret, the full onboarding wizard creating real rows
+through real endpoints, an invalid-password error, the Arabic route's
+`dir="rtl"`, and an `@axe-core/playwright` scan of the sign-in screen
+(zero violations — including a real WCAG 2.4.2 "document has no `<title>`"
+finding this run caught and fixed via `generateMetadata` in the locale
+layout and each auth page).
+
 ## Not yet built
 
-Screens (Session Sign-In, Second Factor Verification, Operations Overview,
-Appointment Calendar, Call Log, Knowledge Base Editor, etc.), the
-accessibility/performance verification pass (A12.3, A12.5, A12.6, A12.8),
-and `tests/e2e` journeys — tracked as the remaining Module 12 build steps.
+The remaining screens (Operations Overview, Appointment Calendar, Call
+Log, Knowledge Base Editor, Service Catalog, Staff And Availability,
+Escalation Rule Configuration, Location Management, Tenant User
+Management, Usage And Billing Summary, Account Settings), and the full
+accessibility/performance verification pass across all of them (A12.3,
+A12.5, A12.6, A12.8) — tracked as the remaining Module 12 build steps.

@@ -55,4 +55,32 @@ export interface Messages {
     usage: string;
     settings: string;
   };
+  home: {
+    welcomeTitle: string;
+    signedInAs: string;
+    onboardingPrompt: string;
+  };
+  onboarding: {
+    wizardTitle: string;
+    stepLocationTitle: string;
+    stepServiceTitle: string;
+    stepStaffTitle: string;
+    stepPhoneTitle: string;
+    locationNameLabel: string;
+    locationAddressLabel: string;
+    locationTimezoneLabel: string;
+    serviceNameArLabel: string;
+    serviceNameEnLabel: string;
+    serviceDurationLabel: string;
+    servicePriceLabel: string;
+    staffNameLabel: string;
+    phoneNumberLabel: string;
+    phoneProviderReferenceLabel: string;
+    continueButton: string;
+    finishButton: string;
+    completeTitle: string;
+    completeDescription: string;
+    backToHomeButton: string;
+    ownerOnlyNotice: string;
+  };
 }
