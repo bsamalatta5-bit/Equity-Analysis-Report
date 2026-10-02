@@ -60,7 +60,13 @@ describe("Calls: metadata, transcripts, recordings (Module 10, A10.2)", () => {
       data: { callId, recordingConsented: true, announcementPlayedAt: new Date() },
     });
     await migratorPrisma.callTurn.create({
-      data: { callId, sequence: 0, speaker: "caller", transcriptText: "hello, this is a test call" },
+      data: {
+        callId,
+        sequence: 0,
+        speaker: "caller",
+        transcriptText: "hello, this is a test call",
+        occurredAt: new Date(),
+      },
     });
 
     recordingBytes = Buffer.from("fake WAV bytes for a test recording — not real audio");

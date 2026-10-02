@@ -378,6 +378,7 @@ model Call {
 }
 
 /// Row-level security: 20240102000100_row_level_security, policy joins through Call.
+/// occurredAt: 20240106000100_call_turn_occurred_at (Module 12, A12.8a).
 model CallTurn {
   id                 String             @id @default(uuid()) @db.Uuid
   callId             String             @db.Uuid
@@ -389,6 +390,7 @@ model CallTurn {
   intent             String?
   confidence         Float?
   latencyMs          Int?
+  occurredAt         DateTime           @db.Timestamptz
 
   call Call @relation(fields: [callId], references: [id])
 

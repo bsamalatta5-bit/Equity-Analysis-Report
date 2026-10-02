@@ -36,9 +36,23 @@ day the suite happens to run) and drives a real booking through the
 Appointment Creation Form, confirms the appointment's phone number is
 masked on the Calendar and unmasked on its Detail screen (A12.7), and
 transitions it to `completed`. Also scans the Calendar and Creation Form
-with `@axe-core/playwright`. The remaining screens' accessibility proof is
-covered by the Module 12 accessibility/performance verification pass once
-every screen exists.
+with `@axe-core/playwright`.
+
+`calls.spec.ts` also seeds its own tenant (a `location_manager`, since
+that role can see both the transcript and the recording section) with a
+call that has two transcript turns and deliberately no recording, and
+confirms: the masked/unmasked phone split across the Call Log and Call
+Detail screens, both turns rendering with their speaker label, the
+real RBAC-gated "no recording available" state (a 404 from
+`GET .../recording`, not a stub), and an `@axe-core/playwright` scan of
+both screens — including the custom audio player's markup. Playing back
+a real recording isn't exercised here: `apps/api`'s recording storage
+resolves its directory relative to its own process's cwd, which differs
+from this spec file's, so it's covered instead by the real encrypted
+recording already in `tests/integration/calls.spec.ts` (Module 10,
+A10.2). The remaining screens' accessibility proof is covered by the
+Module 12 accessibility/performance verification pass once every screen
+exists.
 
 Chromium's `old` headless mode was removed from the version this sandbox
 has preinstalled, hence `PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1` and

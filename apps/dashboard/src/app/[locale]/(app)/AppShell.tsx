@@ -20,6 +20,7 @@ interface NavItem {
 const NAV_ITEMS: readonly NavItem[] = [
   { href: "", labelKey: "nav.operations" },
   { href: "/calendar", labelKey: "nav.calendar" },
+  { href: "/calls", labelKey: "nav.calls" },
 ];
 
 export function AppShell({ locale, children }: { locale: Locale; children: ReactNode }) {

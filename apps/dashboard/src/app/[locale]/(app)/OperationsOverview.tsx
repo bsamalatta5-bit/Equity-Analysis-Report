@@ -11,6 +11,7 @@ import { listLocations } from "../../../lib/locations/api";
 import { listAppointments } from "../../../lib/appointments/api";
 import { APPOINTMENT_STATUS_LABEL_KEYS } from "../../../lib/appointments/status-labels";
 import { listCalls } from "../../../lib/calls/api";
+import { CALL_DISPOSITION_LABEL_KEYS } from "../../../lib/calls/disposition-labels";
 import { getUsage } from "../../../lib/usage/api";
 import { maskPhoneE164 } from "../../../lib/format/phone";
 import { Card } from "../../../components/ui/Card";
@@ -162,7 +163,9 @@ function LocationOverview({
               {calls.slice(0, 5).map((call) => (
                 <li key={call.id} className="flex items-center justify-between text-sm">
                   <span>{new Date(call.startedAt).toLocaleString(locale)}</span>
-                  <Badge tone={call.containmentFlag ? "success" : "warning"}>{call.disposition ?? "—"}</Badge>
+                  <Badge tone={call.containmentFlag ? "success" : "warning"}>
+                    {call.disposition ? t(CALL_DISPOSITION_LABEL_KEYS[call.disposition]) : "—"}
+                  </Badge>
                 </li>
               ))}
             </ul>

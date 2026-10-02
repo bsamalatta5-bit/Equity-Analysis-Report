@@ -48,6 +48,7 @@ export async function recordCallTurn(
       languageConfidence: params.languageConfidence ?? null,
       intent: params.intent ?? null,
       confidence: params.confidence ?? null,
+      occurredAt: new Date(),
     },
   });
 }

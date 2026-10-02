@@ -117,11 +117,48 @@ number on the calendar, the unmasked number on the detail page, a status
 transition to `completed`, and an `@axe-core/playwright` scan (zero
 violations) of both the calendar and the creation form.
 
+### Call Log and Call Detail / Transcript screens
+
+- **Call Log** (`(app)/calls`) — a location-scoped list of calls, each
+  row showing the masked caller number (A12.7) and a disposition badge.
+- **Call Detail And Transcript** (`(app)/calls/[callId]`) — since the
+  transcript endpoint is scoped under a location but a call link only
+  carries a `callId`, the screen tries each of the tenant's locations
+  until the one RLS actually lets this call through responds. Shows the
+  caller's number unmasked (A12.7), every `CallTurn` with its speaker and
+  timestamp, and — for `tenant_owner`/`location_manager` only, matching
+  the recording-access RBAC row — an accessible recording player.
+  `src/components/calls/AudioPlayer.tsx` (A12.8b) is a from-scratch
+  player rather than native `<audio controls>`: Chrome exposes a
+  playback-rate control only in a context menu, Firefox doesn't expose
+  one at all, and A12.8(b) requires keyboard-operable rate control
+  explicitly. Every control (play/pause toggle, a seek `<input
+type="range">`, a rate `<select>`) is its own focusable element wired
+  to a hidden `<audio>`, with an `aria-live` region announcing state
+  changes. The transcript (A12.8a) computes each turn's offset from the
+  call's `startedAt` and highlights whichever turn the player's current
+  playback position falls into.
+
+`CallTurn` had no wall-clock timestamp at all before this screen needed
+one — only a `sequence` ordinal — so Module 12 added `occurredAt`
+(migration `20240106000100_call_turn_occurred_at`, set by
+`apps/voice-gateway/src/pipeline/transcript.ts`'s single insert site) and
+`CallsService.listCalls`/`getCallTranscript` now join `contact` the same
+way `AppointmentsService.list` already does.
+
+Verified end-to-end in `tests/e2e/calls.spec.ts`: the masked/unmasked
+phone split across the Call Log and Call Detail screens, both transcript
+turns rendering with their speaker label, a `location_manager` seeing the
+"no recording available" state for a call that was never recorded (real
+RBAC-gated 404 handling, not a stub), and an `@axe-core/playwright` scan
+(zero violations) of both screens — including the custom audio player's
+markup.
+
 ## Not yet built
 
-The remaining screens (Call Log, Call Detail And Transcript, Knowledge
-Base Editor, Service Catalog, Staff And Availability, Escalation Rule
-Configuration, Location Management, Tenant User Management, Usage And
+The remaining screens (Knowledge Base Editor, Service Catalog, Staff And
+Availability, Escalation Rule Configuration, Location Management, Tenant
+User Management, Usage And
 Billing Summary, Account Settings), and the full accessibility/performance
 verification pass across all of them (A12.3, A12.5, A12.6, A12.8) —
 tracked as the remaining Module 12 build steps.

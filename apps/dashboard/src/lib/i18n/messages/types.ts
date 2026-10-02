@@ -122,4 +122,34 @@ export interface Messages {
     backToCalendarButton: string;
     maskedPhoneLabel: string;
   };
+  calls: {
+    logTitle: string;
+    noCalls: string;
+    detailTitle: string;
+    backToCallLogButton: string;
+    dispositionLabel: string;
+    startedAtLabel: string;
+    durationLabel: string;
+    contactPhoneLabel: string;
+    containedYes: string;
+    containedNo: string;
+    transcriptTitle: string;
+    noTranscript: string;
+    speakerCaller: string;
+    speakerAssistant: string;
+    recordingTitle: string;
+    recordingUnavailable: string;
+    playButton: string;
+    pauseButton: string;
+    playbackEnded: string;
+    playbackRateLabel: string;
+    seekLabel: string;
+    dispositionContained: string;
+    dispositionEscalated: string;
+    dispositionAbandoned: string;
+    dispositionMessageCaptured: string;
+    dispositionEmergencyTransfer: string;
+    dispositionProviderFailure: string;
+    dispositionSpendLimitSuspended: string;
+  };
 }

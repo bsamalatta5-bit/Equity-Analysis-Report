@@ -22,12 +22,17 @@ export class CallsService {
     this.storageConfig = loadRecordingStorageConfig();
   }
 
+  /** A12.7: the Call Log's masked/unmasked split is a dashboard display decision over this same contact data. */
   async listCalls(tx: Prisma.TransactionClient, locationId: string) {
-    return tx.call.findMany({ where: { locationId }, orderBy: { startedAt: "desc" } });
+    return tx.call.findMany({
+      where: { locationId },
+      include: { contact: true },
+      orderBy: { startedAt: "desc" },
+    });
   }
 
   async getCallTranscript(tx: Prisma.TransactionClient, locationId: string, callId: string) {
-    const call = await tx.call.findUnique({ where: { id: callId } });
+    const call = await tx.call.findUnique({ where: { id: callId }, include: { contact: true } });
     if (!call || call.locationId !== locationId) {
       throw new NotFoundError("Call", callId);
     }

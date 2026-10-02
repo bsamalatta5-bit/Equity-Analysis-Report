@@ -119,6 +119,7 @@ describe("runRetentionJob (A10.3)", () => {
         sequence: 0,
         speaker: "caller",
         transcriptText: "this transcript must be deleted",
+        occurredAt: oldCallStartedAt,
       },
     });
 
@@ -132,6 +133,7 @@ describe("runRetentionJob (A10.3)", () => {
         sequence: 0,
         speaker: "caller",
         transcriptText: "this transcript must survive",
+        occurredAt: new Date(now.getTime() - 60_000),
       },
     });
 
