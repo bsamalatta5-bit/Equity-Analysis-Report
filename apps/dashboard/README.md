@@ -58,9 +58,6 @@ field `SessionGuard` didn't already resolve.
   `GET /auth/session` check, loading/error/offline state included, with an
   unauthenticated response redirecting to sign-in instead of rendering as
   an error.
-- `src/app/[locale]/HomeShell.tsx` — a minimal authenticated home (role,
-  sign-out, a link to onboarding for owners) standing in for Operations
-  Overview until that screen is built.
 
 Verified end-to-end in `tests/e2e/auth.spec.ts` against real production
 builds of both `apps/dashboard` and `apps/api` and real Postgres/Redis: a
@@ -72,11 +69,59 @@ through real endpoints, an invalid-password error, the Arabic route's
 finding this run caught and fixed via `generateMetadata` in the locale
 layout and each auth page).
 
+### Operations, calendar, and appointment screens
+
+Every authenticated screen now lives under the `src/app/[locale]/(app)/`
+route group (a URL-transparent grouping folder — `(app)/page.tsx` is still
+served at `/{locale}`), whose `layout.tsx` wraps the whole group in one
+`AuthGuard` + `AppShell` (sidebar nav, sign-out) instead of each page
+re-deriving its own auth check. `useCurrentSession()`
+(`src/lib/auth/session-context.tsx`) hands the already-resolved session
+down to any page in the group without a second fetch.
+
+- **Operations Overview** (`(app)/page.tsx`) — a location picker (hidden
+  when there's only one), today's appointments and recent calls for the
+  selected location, and a usage snapshot for `tenant_owner`/
+  `platform_operator` (the only roles `GET /tenants/:id/usage` allows).
+  Replaces the placeholder "signed in as" card from Module 12 part 1.
+- **Appointment Calendar** (`(app)/calendar`) — a 7-day agenda view (one
+  `GET /appointments` call per week, grouped client-side by day), not a
+  month-grid widget: an agenda list is the more accessible pattern for a
+  keyboard/screen-reader user, and every row links to its Appointment
+  Detail screen.
+- **Appointment Creation Form** (`(app)/appointments/new`) — service →
+  staff (optional filter) → date → a real `GET .../open-slots` query,
+  rendered as clickable slot buttons; booking sends the slot's own
+  `staffMemberId`, never a separately chosen one, since the two could
+  otherwise disagree when a row changed between the open-slots query and
+  submission.
+- **Appointment Detail** (`(app)/appointments/[appointmentId]`) — full
+  detail plus the valid next-status actions (`confirmed` → completed /
+  no-show / cancelled, matching `AppointmentsService.VALID_TRANSITIONS`;
+  terminal statuses show no actions).
+
+**A12.7** (masked phone numbers in list views, unmasked in detail views
+reachable by an authorized role): `src/lib/format/phone.ts`'s
+`maskPhoneE164` renders only the last 4 digits everywhere a caller's
+number appears in a list (Operations Overview, Calendar); the Appointment
+Detail screen renders `contact.phoneE164` as-is. Two small, justified
+`apps/api` additions made this possible: `AppointmentsService.list` now
+joins `contact`/`service`/`staffMember` (previously bare foreign-key IDs
+with no display data), and a new `GET /tenants/:id/appointments/:id`
+endpoint backs the Detail screen (there was previously no way to fetch one
+appointment by id at all).
+
+Verified end-to-end in `tests/e2e/appointments.spec.ts`: a real booking
+through the real form (service → open slot → contact phone), the masked
+number on the calendar, the unmasked number on the detail page, a status
+transition to `completed`, and an `@axe-core/playwright` scan (zero
+violations) of both the calendar and the creation form.
+
 ## Not yet built
 
-The remaining screens (Operations Overview, Appointment Calendar, Call
-Log, Knowledge Base Editor, Service Catalog, Staff And Availability,
-Escalation Rule Configuration, Location Management, Tenant User
-Management, Usage And Billing Summary, Account Settings), and the full
-accessibility/performance verification pass across all of them (A12.3,
-A12.5, A12.6, A12.8) — tracked as the remaining Module 12 build steps.
+The remaining screens (Call Log, Call Detail And Transcript, Knowledge
+Base Editor, Service Catalog, Staff And Availability, Escalation Rule
+Configuration, Location Management, Tenant User Management, Usage And
+Billing Summary, Account Settings), and the full accessibility/performance
+verification pass across all of them (A12.3, A12.5, A12.6, A12.8) —
+tracked as the remaining Module 12 build steps.

@@ -22,6 +22,7 @@ export interface Messages {
     requiredField: string;
     skipToContent: string;
     languageSwitcherLabel: string;
+    mainNavigationLabel: string;
   };
   auth: {
     signInTitle: string;
@@ -82,5 +83,43 @@ export interface Messages {
     completeDescription: string;
     backToHomeButton: string;
     ownerOnlyNotice: string;
+  };
+  operations: {
+    title: string;
+    locationLabel: string;
+    todayAppointmentsTitle: string;
+    noAppointmentsToday: string;
+    recentCallsTitle: string;
+    noCallsYet: string;
+    usageTitle: string;
+    billableMinutesLabel: string;
+    includedMinutesLabel: string;
+    viewCalendarLink: string;
+  };
+  appointment: {
+    calendarTitle: string;
+    newAppointmentButton: string;
+    detailTitle: string;
+    statusPending: string;
+    statusConfirmed: string;
+    statusCancelled: string;
+    statusCompleted: string;
+    statusNoShow: string;
+    markCompletedButton: string;
+    markNoShowButton: string;
+    cancelButton: string;
+    newAppointmentTitle: string;
+    serviceLabel: string;
+    staffLabel: string;
+    dateLabel: string;
+    timeSlotLabel: string;
+    selectServiceFirst: string;
+    noOpenSlots: string;
+    contactPhoneLabel: string;
+    contactNameLabel: string;
+    createButton: string;
+    createdNotice: string;
+    backToCalendarButton: string;
+    maskedPhoneLabel: string;
   };
 }

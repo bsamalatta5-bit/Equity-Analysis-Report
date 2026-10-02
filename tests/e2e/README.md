@@ -27,9 +27,18 @@ password's inline error, first-time TOTP enrollment through to a completed
 onboarding wizard (location → service → staff → phone number, all created
 through the real `apps/api` endpoints), already-enrolled TOTP sign-in, the
 Arabic route's `dir="rtl"` rendering, and an `@axe-core/playwright` scan of
-the sign-in screen (A12.3) — the first screen's automated accessibility
-proof; the rest are covered by the Module 12 accessibility/performance
-verification pass once every screen exists.
+the sign-in screen (A12.3).
+
+`appointments.spec.ts` seeds its own tenant/location/service/staff member
+directly via Prisma (not `global-setup.ts`'s shared fixture — this one
+also needs a wide-open `AvailabilityRule` so open slots exist whichever
+day the suite happens to run) and drives a real booking through the
+Appointment Creation Form, confirms the appointment's phone number is
+masked on the Calendar and unmasked on its Detail screen (A12.7), and
+transitions it to `completed`. Also scans the Calendar and Creation Form
+with `@axe-core/playwright`. The remaining screens' accessibility proof is
+covered by the Module 12 accessibility/performance verification pass once
+every screen exists.
 
 Chromium's `old` headless mode was removed from the version this sandbox
 has preinstalled, hence `PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1` and

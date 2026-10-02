@@ -3,41 +3,41 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
-import type { Locale } from "../../../lib/i18n/locales";
-import { useI18n } from "../../../lib/i18n/provider";
-import { AuthGuard } from "../../../components/auth/AuthGuard";
-import type { SessionInfo } from "../../../lib/auth/api";
-import { Button } from "../../../components/ui/Button";
-import { TextField } from "../../../components/ui/TextField";
-import { Card } from "../../../components/ui/Card";
-import { ApiError, NetworkError } from "../../../lib/api/client";
+import type { Locale } from "../../../../lib/i18n/locales";
+import { useI18n } from "../../../../lib/i18n/provider";
+import { useCurrentSession } from "../../../../lib/auth/session-context";
+import { Button } from "../../../../components/ui/Button";
+import { TextField } from "../../../../components/ui/TextField";
+import { Card } from "../../../../components/ui/Card";
+import { ApiError, NetworkError } from "../../../../lib/api/client";
 import {
   createLocation,
   createPhoneNumber,
   createService,
   createStaffMember,
-} from "../../../lib/onboarding/api";
+} from "../../../../lib/onboarding/api";
 
 type Step = "location" | "service" | "staff" | "phone" | "complete";
 
 export function OnboardingWizardPage({ locale }: { locale: Locale }) {
-  return <AuthGuard locale={locale}>{(session) => <Wizard locale={locale} session={session} />}</AuthGuard>;
-}
-
-function Wizard({ locale, session }: { locale: Locale; session: SessionInfo }) {
-  const { t } = useI18n();
+  const session = useCurrentSession();
 
   if (session.role !== "tenant_owner") {
-    return (
-      <main id="main-content" className="flex min-h-screen items-center justify-center p-token-8">
-        <Card className="max-w-sm text-center text-sm text-text-secondary">
-          {t("onboarding.ownerOnlyNotice")}
-        </Card>
-      </main>
-    );
+    return <OwnerOnlyNotice />;
   }
 
   return <WizardSteps locale={locale} tenantId={session.tenantId} />;
+}
+
+function OwnerOnlyNotice() {
+  const { t } = useI18n();
+  return (
+    <div className="flex items-center justify-center p-token-8">
+      <Card className="max-w-sm text-center text-sm text-text-secondary">
+        {t("onboarding.ownerOnlyNotice")}
+      </Card>
+    </div>
+  );
 }
 
 function WizardSteps({ locale, tenantId }: { locale: Locale; tenantId: string }) {
@@ -46,7 +46,7 @@ function WizardSteps({ locale, tenantId }: { locale: Locale; tenantId: string })
   const [locationId, setLocationId] = useState<string | null>(null);
 
   return (
-    <main id="main-content" className="flex min-h-screen items-center justify-center p-token-8">
+    <div className="flex items-center justify-center p-token-8">
       <Card className="w-full max-w-md">
         <h1 className="text-lg font-semibold text-text-primary">{t("onboarding.wizardTitle")}</h1>
         {step === "location" ? (
@@ -69,7 +69,7 @@ function WizardSteps({ locale, tenantId }: { locale: Locale; tenantId: string })
         ) : null}
         {step === "complete" ? <CompleteStep locale={locale} /> : null}
       </Card>
-    </main>
+    </div>
   );
 }
 

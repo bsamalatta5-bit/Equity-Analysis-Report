@@ -47,6 +47,19 @@ export class AppointmentsController {
   }
 
   @Roles("tenant_owner", "location_manager", "front_desk_user")
+  @Get(":appointmentId")
+  async get(
+    @Param("tenantId", new ParseUUIDPipe()) tenantId: string,
+    @Param("appointmentId", new ParseUUIDPipe()) appointmentId: string,
+    @CurrentHumanPrincipal() principal: HumanPrincipal,
+  ) {
+    assertTenantAccess(principal, tenantId);
+    const appointment = await this.appointments.get(this.tenantContext.tx, appointmentId);
+    assertLocationAccess(principal, appointment.locationId);
+    return appointment;
+  }
+
+  @Roles("tenant_owner", "location_manager", "front_desk_user")
   @Patch(":appointmentId/reschedule")
   async reschedule(
     @Param("tenantId", new ParseUUIDPipe()) tenantId: string,
@@ -56,7 +69,13 @@ export class AppointmentsController {
     body: ReturnType<typeof rescheduleAppointmentRequestSchema.parse>,
   ) {
     assertTenantAccess(principal, tenantId);
-    return this.appointments.reschedule(this.tenantContext.tx, tenantId, principal.userId, appointmentId, body);
+    return this.appointments.reschedule(
+      this.tenantContext.tx,
+      tenantId,
+      principal.userId,
+      appointmentId,
+      body,
+    );
   }
 
   @Roles("tenant_owner", "location_manager", "front_desk_user")

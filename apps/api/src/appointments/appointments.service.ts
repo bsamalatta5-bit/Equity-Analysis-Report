@@ -17,7 +17,10 @@ const EXCLUSION_CONSTRAINT_NAME = "appointment_no_overlap";
 
 /** A4.3: the DB exclusion constraint (not application locking) is the only thing preventing double-booking. */
 export function isSlotContentionError(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError) {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError
+  ) {
     return error.message.includes(EXCLUSION_CONSTRAINT_NAME);
   }
   return false;
@@ -35,6 +38,12 @@ export const VALID_TRANSITIONS: Record<AppointmentStatus, readonly AppointmentSt
 export class AppointmentsService {
   constructor(private readonly audit: AuditService) {}
 
+  /**
+   * A12.7: the dashboard's list views need the caller's phone number only
+   * in masked form, so the contact/service/staffMember relations this
+   * joins in are display data the dashboard itself decides how to render
+   * — not a second, unmasked channel for the same data.
+   */
   async list(tx: Prisma.TransactionClient, tenantId: string, query: ListAppointmentsQuery) {
     return tx.appointment.findMany({
       where: {
@@ -49,8 +58,20 @@ export class AppointmentsService {
             }
           : {}),
       },
+      include: { contact: true, service: true, staffMember: true },
       orderBy: { startAt: "asc" },
     });
+  }
+
+  async get(tx: Prisma.TransactionClient, appointmentId: string) {
+    const appointment = await tx.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { contact: true, service: true, staffMember: true, location: true },
+    });
+    if (!appointment) {
+      throw new NotFoundError("Appointment", appointmentId);
+    }
+    return appointment;
   }
 
   /**
