@@ -154,11 +154,37 @@ RBAC-gated 404 handling, not a stub), and an `@axe-core/playwright` scan
 (zero violations) of both screens — including the custom audio player's
 markup.
 
+### Knowledge base, catalog, staff, escalation, and location screens
+
+- **Knowledge Base Editor** (`(app)/knowledge`) — tenant-scoped (no
+  location dimension, matching `KnowledgeItem`'s own data model), list
+  plus inline add/edit forms; delete is `tenant_owner`-only, matching
+  `KnowledgeController`'s own RBAC.
+- **Service Catalog** (`(app)/services`) and **Staff And Availability**
+  (`(app)/staff`) — location-scoped lists with inline add/edit. Each
+  staff member's "Manage availability" expands into its own
+  `AvailabilityRule` list and add form — `createAvailabilityRuleRequestSchema`
+  requires `staffMemberId` in the request body itself, not only the URL,
+  since `AvailabilityController`'s own `ZodValidationPipe` runs before the
+  controller merges in the URL param; the dashboard's `createAvailabilityRule`
+  sends both.
+- **Escalation Rule Configuration** (`(app)/escalation-rules`) —
+  location-scoped list plus an add form (one active-hours window per
+  rule, matching what the form collects); delete is `tenant_owner`-only.
+- **Location Management** (`(app)/locations`) — list/add/edit locations
+  (add is `tenant_owner`-only, matching `LocationsController`), with each
+  location's phone numbers manageable inline (`tenant_owner`-only, same
+  RBAC row as creating a location itself).
+
+Verified end-to-end in `tests/e2e/catalog-management.spec.ts`: a single
+`tenant_owner` session adding one of each (a knowledge item, a service, a
+staff member with an availability rule, an escalation rule, and a phone
+number connected to the seeded location), and an `@axe-core/playwright`
+scan (zero violations) of all five screens.
+
 ## Not yet built
 
-The remaining screens (Knowledge Base Editor, Service Catalog, Staff And
-Availability, Escalation Rule Configuration, Location Management, Tenant
-User Management, Usage And
-Billing Summary, Account Settings), and the full accessibility/performance
-verification pass across all of them (A12.3, A12.5, A12.6, A12.8) —
+The remaining screens (Tenant User Management, Usage And Billing
+Summary, Account Settings), and the full accessibility/performance
+verification pass across every screen (A12.3, A12.5, A12.6, A12.8) —
 tracked as the remaining Module 12 build steps.

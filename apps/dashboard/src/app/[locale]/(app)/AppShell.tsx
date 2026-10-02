@@ -21,6 +21,11 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "", labelKey: "nav.operations" },
   { href: "/calendar", labelKey: "nav.calendar" },
   { href: "/calls", labelKey: "nav.calls" },
+  { href: "/knowledge", labelKey: "nav.knowledgeBase" },
+  { href: "/services", labelKey: "nav.services" },
+  { href: "/staff", labelKey: "nav.staff" },
+  { href: "/escalation-rules", labelKey: "nav.escalationRules" },
+  { href: "/locations", labelKey: "nav.locations" },
 ];
 
 export function AppShell({ locale, children }: { locale: Locale; children: ReactNode }) {

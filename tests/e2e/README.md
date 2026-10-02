@@ -50,7 +50,25 @@ a real recording isn't exercised here: `apps/api`'s recording storage
 resolves its directory relative to its own process's cwd, which differs
 from this spec file's, so it's covered instead by the real encrypted
 recording already in `tests/integration/calls.spec.ts` (Module 10,
-A10.2). The remaining screens' accessibility proof is covered by the
+A10.2).
+
+`catalog-management.spec.ts` seeds its own `tenant_owner` (every create
+action across these five screens needs owner or location_manager, and
+only an owner can also delete a knowledge item, add a location, or add a
+phone number, so one owner session covers all of it) and drives one real
+create through each of the Knowledge Base Editor, Service Catalog, Staff
+And Availability (staff member plus one availability rule), Escalation
+Rule Configuration, and Location Management (a phone number added to the
+seeded location) screens, then scans all five with
+`@axe-core/playwright`. Caught a real bug this run, not a test-only
+quirk: `createAvailabilityRuleRequestSchema` requires `staffMemberId` in
+the request body itself (the controller only merges in the URL param
+after Zod validation already ran), so the dashboard's own client was
+sending an incomplete body and getting a 400 on every attempt — fixed in
+`src/lib/availability/api.ts`, not worked around in the test.
+
+The remaining screens' (Tenant User Management, Usage And Billing
+Summary, Account Settings) accessibility proof is covered by the
 Module 12 accessibility/performance verification pass once every screen
 exists.
 
