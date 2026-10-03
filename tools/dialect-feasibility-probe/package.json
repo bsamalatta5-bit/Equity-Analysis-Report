@@ -1,0 +1,23 @@
+{
+  "name": "@voice-receptionist/dialect-feasibility-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Module 1 halt-gate benchmark harness (Section 6, Module 1). Standalone: no production code depends on this package.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test:unit": "vitest run",
+    "run-benchmark": "ts-node --compiler-options {\"module\":\"CommonJS\"} src/run-benchmark.ts"
+  },
+  "dependencies": {
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "ts-node": "10.9.2",
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
+  }
+}

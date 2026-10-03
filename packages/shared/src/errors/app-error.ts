@@ -1,0 +1,165 @@
+import type { ErrorCode } from "../constants/error-codes";
+
+export interface AppErrorOptions {
+  readonly httpStatus: number;
+  readonly cause?: unknown;
+  readonly details?: Readonly<Record<string, unknown>> | undefined;
+}
+
+/**
+ * Base class for every typed application error. Never thrown or caught as a
+ * bare Error — callers switch on `code` to decide handling, and the global
+ * exception filter (apps/api/src/common/filters) maps `httpStatus` to the
+ * HTTP response without leaking `details` for 403/401 responses.
+ */
+export class AppError extends Error {
+  readonly code: ErrorCode;
+  readonly httpStatus: number;
+  readonly details: Readonly<Record<string, unknown>> | undefined;
+
+  constructor(code: ErrorCode, message: string, options: AppErrorOptions) {
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
+    this.name = "AppError";
+    this.code = code;
+    this.httpStatus = options.httpStatus;
+    this.details = options.details;
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super("VALIDATION_FAILED", message, { httpStatus: 400, details });
+    this.name = "ValidationError";
+  }
+}
+
+export class UnauthenticatedError extends AppError {
+  constructor(message = "Authentication is required.") {
+    super("UNAUTHENTICATED", message, { httpStatus: 401 });
+    this.name = "UnauthenticatedError";
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = "This operation is not permitted for the current principal.") {
+    super("FORBIDDEN", message, { httpStatus: 403 });
+    this.name = "ForbiddenError";
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(entityType: string, entityId: string) {
+    super("NOT_FOUND", `${entityType} ${entityId} was not found.`, { httpStatus: 404 });
+    this.name = "NotFoundError";
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message: string, details?: Readonly<Record<string, unknown>>) {
+    super("CONFLICT", message, { httpStatus: 409, details });
+    this.name = "ConflictError";
+  }
+}
+
+export class SlotContentionError extends AppError {
+  constructor(message = "The requested slot is no longer available.") {
+    super("SLOT_CONTENTION", message, { httpStatus: 409 });
+    this.name = "SlotContentionError";
+  }
+}
+
+export class RateLimitedError extends AppError {
+  constructor(retryAfterSeconds: number) {
+    super("RATE_LIMITED", "Too many attempts. Try again later.", {
+      httpStatus: 429,
+      details: { retryAfterSeconds },
+    });
+    this.name = "RateLimitedError";
+  }
+}
+
+export class AccountLockedError extends AppError {
+  constructor(lockedUntil: Date) {
+    super("ACCOUNT_LOCKED", "This account is temporarily locked.", {
+      httpStatus: 423,
+      details: { lockedUntil: lockedUntil.toISOString() },
+    });
+    this.name = "AccountLockedError";
+  }
+}
+
+export class RefreshTokenReusedError extends AppError {
+  constructor() {
+    super("REFRESH_TOKEN_REUSED", "This refresh token has already been used.", { httpStatus: 401 });
+    this.name = "RefreshTokenReusedError";
+  }
+}
+
+export class WebhookSignatureInvalidError extends AppError {
+  constructor() {
+    super("WEBHOOK_SIGNATURE_INVALID", "Webhook signature verification failed.", { httpStatus: 401 });
+    this.name = "WebhookSignatureInvalidError";
+  }
+}
+
+export class WebhookReplayDetectedError extends AppError {
+  constructor() {
+    super("WEBHOOK_REPLAY_DETECTED", "This webhook nonce was already processed or the timestamp is stale.", {
+      httpStatus: 401,
+    });
+    this.name = "WebhookReplayDetectedError";
+  }
+}
+
+/** A11.2: thrown before any Call row is created, mirroring WebhookSignatureInvalidError/WebhookReplayDetectedError's "a rejected webhook creates no call record." */
+export class ConcurrencyLimitReachedError extends AppError {
+  constructor(busyMessage: string) {
+    super("CONCURRENCY_LIMIT_REACHED", "This tenant's concurrent call limit has been reached.", {
+      httpStatus: 429,
+      details: { busyMessage },
+    });
+    this.name = "ConcurrencyLimitReachedError";
+  }
+}
+
+export class ProviderTimeoutError extends AppError {
+  constructor(providerName: string, operationName: string) {
+    super("PROVIDER_TIMEOUT", `${providerName} timed out during ${operationName}.`, { httpStatus: 504 });
+    this.name = "ProviderTimeoutError";
+  }
+}
+
+export class ProviderFailureError extends AppError {
+  constructor(providerName: string, operationName: string, cause?: unknown) {
+    super("PROVIDER_FAILURE", `${providerName} failed during ${operationName}.`, {
+      httpStatus: 502,
+      cause,
+    });
+    this.name = "ProviderFailureError";
+  }
+}
+
+/** A10.1: the consent announcement must be recorded (ConsentRecord.announcementPlayedAt set) before any caller-speech CallTurn is persisted. */
+export class ConsentNotRecordedError extends AppError {
+  constructor(callId: string) {
+    super("CONSENT_NOT_RECORDED", `Call ${callId} has no recorded consent announcement yet.`, {
+      httpStatus: 409,
+    });
+    this.name = "ConsentNotRecordedError";
+  }
+}
+
+export class RecordingNotFoundError extends AppError {
+  constructor(callId: string) {
+    super("RECORDING_NOT_FOUND", `Call ${callId} has no recording.`, { httpStatus: 404 });
+    this.name = "RecordingNotFoundError";
+  }
+}
+
+/** A10.2: thrown by the public recording-serving route when a signed URL's token fails HMAC verification or has expired. */
+export class SignedUrlInvalidError extends AppError {
+  constructor() {
+    super("SIGNED_URL_INVALID", "This recording link is invalid or has expired.", { httpStatus: 403 });
+    this.name = "SignedUrlInvalidError";
+  }
+}

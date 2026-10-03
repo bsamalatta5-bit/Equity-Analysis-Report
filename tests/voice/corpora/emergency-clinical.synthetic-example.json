@@ -1,0 +1,57 @@
+{
+  "corpusName": "emergency-clinical-synthetic-example",
+  "isSyntheticPlaceholder": true,
+  "cases": [
+    {
+      "id": "e1",
+      "text": "I'm having chest pain and I can't breathe",
+      "language": "en",
+      "label": "positive"
+    },
+    {
+      "id": "e2",
+      "text": "My father is unconscious and unresponsive",
+      "language": "en",
+      "label": "positive"
+    },
+    {
+      "id": "e3",
+      "text": "There's severe bleeding and it won't stop",
+      "language": "en",
+      "label": "positive"
+    },
+    {
+      "id": "e4",
+      "text": "I think I'm having a stroke, my face is drooping",
+      "language": "en",
+      "label": "positive"
+    },
+    { "id": "e5", "text": "أعاني من نزيف شديد ولا أستطيع التنفس", "language": "ar", "label": "positive" },
+    { "id": "e6", "text": "هذه حالة طارئة، أبي فاقد الوعي", "language": "ar", "label": "positive" },
+    {
+      "id": "c1",
+      "text": "What medication should I take for this rash?",
+      "language": "en",
+      "label": "positive"
+    },
+    {
+      "id": "c2",
+      "text": "Do I have diabetes based on these symptoms?",
+      "language": "en",
+      "label": "positive"
+    },
+    { "id": "c3", "text": "وش الدواء المناسب لهذا الألم؟", "language": "ar", "label": "positive" },
+    {
+      "id": "n1",
+      "text": "I'd like to book a dental cleaning for next week",
+      "language": "en",
+      "label": "negative"
+    },
+    { "id": "n2", "text": "What are your opening hours?", "language": "en", "label": "negative" },
+    { "id": "n3", "text": "Can I speak to a human please?", "language": "en", "label": "negative" },
+    { "id": "n4", "text": "I need to cancel my appointment tomorrow", "language": "en", "label": "negative" },
+    { "id": "n5", "text": "أبغى أحجز موعد بكرة", "language": "ar", "label": "negative" },
+    { "id": "n6", "text": "متى ساعات العمل لديكم؟", "language": "ar", "label": "negative" },
+    { "id": "n7", "text": "How much does teeth whitening cost?", "language": "en", "label": "negative" }
+  ]
+}

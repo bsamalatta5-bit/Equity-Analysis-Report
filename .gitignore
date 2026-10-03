@@ -3,3 +3,28 @@ dist/
 .env
 *.pptx
 /tmp/
+
+# voice-receptionist platform
+.turbo/
+coverage/
+.next/
+build/
+*.tsbuildinfo
+prisma/generated/
+.env.local
+playwright-report/
+test-results/
+.pnpm-store/
+dump.rdb
+
+# Module 10: RECORDING_STORAGE_DIR's default — local-disk stand-in for an
+# object store (see docs/adr/version-substitutions.md), never real content.
+var/
+
+# Module 12: tests/e2e/global-setup.ts writes seeded test credentials here
+# for spec files to read; regenerated every run, never meant to persist.
+tests/e2e/.fixture-output.json
+
+# Module 13: tests/load/seed.ts writes seeded load-test credentials here
+# for dashboard-read-load.js to read; regenerated every run.
+tests/load/.fixture.json

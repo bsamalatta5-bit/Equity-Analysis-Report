@@ -1,0 +1,13 @@
+{
+  "name": "eslint-plugin-dashboard-rtl",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.js",
+  "scripts": {
+    "test:unit": "vitest run"
+  },
+  "devDependencies": {
+    "eslint": "8.57.1",
+    "vitest": "2.1.4"
+  }
+}
