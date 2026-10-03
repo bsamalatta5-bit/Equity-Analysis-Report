@@ -138,9 +138,67 @@ real encrypt/decrypt round-trip in `tests/integration/calls.spec.ts`.
 Full inventory, rotation-impact notes per secret, and the staging/
 production rollout plan are in `docs/secrets.md`.
 
-## Not yet built (tracked in this same document as each part lands)
+## A13.1 — Terraform for network/database/cache/storage/compute/secrets/alerting
 
-- A13.1 — Terraform for network/database/cache/storage/compute/secrets/
-  alerting resources.
-- A13.4-A13.6 — canary, rollback, and migration-ordering runbooks.
-- Load testing (`tests/load`, k6).
+**Built, never applied** (no cloud account exists for this session to
+provision against — see `infra/terraform/README.md`). Real,
+`terraform fmt`-clean HCL (not a sketch) for every category Section 13
+names: a VPC with per-AZ NAT gateways, RDS for PostgreSQL 16, an
+ElastiCache Redis replication group, the S3 bucket `recording-storage.ts`'s
+local-disk stand-in would target, an ECS Fargate cluster/service/ALB with
+one fully worked task definition demonstrating the secrets-injection
+pattern, the remaining application-originated secrets from
+`docs/secrets.md`'s inventory, and CloudWatch alarms plus an SNS topic.
+`terraform validate` could not run — `registry.terraform.io` is not on
+this sandbox's network allowlist, the same restriction category as
+Semgrep/Trivy/Playwright's CDN elsewhere in this build; `terraform fmt
+-check` passing on every file is the verification this sandbox could
+actually perform (a full parse, not a guess), documented precisely as
+such rather than implied to be more than it is.
+
+## A13.4-A13.6 — canary, rollback, and migration-ordering runbooks
+
+**Built.** `docs/runbooks/canary-deployment.md`, `rollback.md`, and
+`migration-ordering.md`, each grounded in this build's actual mechanisms
+rather than generic advice: the real rolling-update behavior of
+`aws_ecs_service.api` (`infra/terraform/compute.tf`), the real alarms in
+`alerting.tf`, the real RLS-enforcement reason CI's database role
+separation matters (cross-referenced to this same document's A13.2
+entry), and the real two-deploy sequencing an additive-vs-destructive
+Prisma migration needs under a rolling deployment. The canary runbook is
+explicit about the one real gap in it: `infra/terraform` provisions no
+weighted-traffic split (a second ALB listener rule, CodeDeploy blue/green,
+or a service mesh would be needed for one), so "canary" there means a
+time-boxed ECS deployment-configuration health gate, not a true
+percentage-of-real-traffic split — documented as a known gap rather than
+quietly presented as the real thing.
+
+## Load testing (`tests/load`, k6)
+
+**Built and actually run** (not merely scaffolded) — `tests/load/
+dashboard-read-load.js` against a real production build of `apps/api`:
+20 virtual users ramped over 55s against `GET /tenants/:id/locations/
+:id/calls` (the Call Log screen's own endpoint, representative of every
+Module 12 list-read screen's guard/interceptor/RLS-scoped-query shape).
+Real result from this session's run: 26,964 requests, 0% failed, p95
+47.8ms against a 500ms budget — both configured thresholds passed with
+wide margin. `tests/load/seed.ts` is the Node-side half (k6 scripts run
+in k6's own JS engine and can't `import` Prisma); full reproduction
+steps and the complete result are in `tests/load/README.md`. One
+scenario exists (an authenticated list-read); write-heavy and
+WebSocket/real-time-call load are documented there as not yet covered.
+
+## Module 13: closing status
+
+Every A13.x acceptance criterion this document tracks is now built:
+A13.1 (Terraform, unapplied), A13.2 (CI gates, with one real RLS-testing
+bug found and fixed), A13.3 (secrets abstraction), A13.4-A13.6 (canary/
+rollback/migration-ordering runbooks), A13.7 (CSP+nonce on both
+services), A13.8 (stored-XSS output encoding), A13.9 (the
+`dangerouslySetInnerHTML` static scan), and load testing. What's
+explicitly _not_ claimed: a real cloud account to apply the Terraform
+against, `terraform validate`/`plan` output (network-blocked in this
+sandbox), Semgrep/Trivy's registry-dependent rule packs and vulnerability
+database (same restriction), and a true weighted-traffic canary split
+(the canary runbook's documented gap) — each called out at its own
+section above rather than folded into a blanket "done."

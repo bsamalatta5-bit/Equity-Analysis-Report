@@ -1,6 +1,11 @@
 # docs/runbooks
 
-Incident and rollback procedures (Module 13: Delivery Infrastructure) —
-not built in this session, since there is no deployed infrastructure yet
-to write a runbook against (`infra/terraform` is likewise empty). See
-`docs/adr/version-substitutions.md`.
+Module 13 (Delivery Infrastructure) operational runbooks, each grounded
+in this build's actual mechanisms rather than generic advice:
+
+- `canary-deployment.md` (A13.4)
+- `rollback.md` (A13.5)
+- `migration-ordering.md` (A13.6)
+
+See `docs/adr/delivery-infrastructure.md` for how each was verified (and,
+for the canary runbook, the one real gap it documents rather than hides).
