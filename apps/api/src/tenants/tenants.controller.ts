@@ -50,6 +50,17 @@ export class TenantsController {
     return this.tenants.listUsers(this.tenantContext.tx, tenantId, principal.role === "platform_operator");
   }
 
+  @Roles("tenant_owner", "platform_operator")
+  @Get("users/:userId")
+  async getUser(
+    @Param("tenantId", new ParseUUIDPipe()) tenantId: string,
+    @Param("userId", new ParseUUIDPipe()) userId: string,
+    @CurrentHumanPrincipal() principal: HumanPrincipal,
+  ) {
+    assertTenantAccess(principal, tenantId);
+    return this.tenants.getUser(this.tenantContext.tx, tenantId, userId);
+  }
+
   @Roles("tenant_owner")
   @Post("users")
   async createUser(

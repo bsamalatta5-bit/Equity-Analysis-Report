@@ -182,9 +182,56 @@ staff member with an availability rule, an escalation rule, and a phone
 number connected to the seeded location), and an `@axe-core/playwright`
 scan (zero violations) of all five screens.
 
+### User management, usage/billing, and account settings screens
+
+- **Tenant User Management** (`(app)/users`, list restricted to
+  `tenant_owner`/`platform_operator` matching `TenantsController`'s own
+  RBAC; add/edit/disable is `tenant_owner`-only) — list, an add form
+  (email, role, assigned locations), and an inline edit form per user.
+  There was previously no way to see a user's *current* location
+  assignments at all (`listUsers` never selected them, since no caller
+  needed them); `updateUser` replaces the full assignment set whenever
+  `locationIds` is present in the request, so an edit form that couldn't
+  see the current set would silently wipe it on every save that didn't
+  touch locations. `apps/api` gained one more read endpoint for this,
+  `GET /tenants/:id/users/:userId` (`TenantsService.getUser`), returning
+  the same identity fields `listUsers` already exposes plus `locationIds`
+  — nothing `assertTenantAccess` didn't already gate.
+  Creating a user returns a one-time `temporaryPassword` (there is still
+  no invitation channel in this build, per Section 1 and `TenantsService`'s
+  own doc comment); the screen shows it once in a dismissible notice and
+  never re-fetches it.
+- **Usage And Billing Summary** (`(app)/usage`, `tenant_owner`/
+  `platform_operator`-only, matching `UsageController`'s RBAC) — the
+  current subscription (plan, status, included minutes, spend cap) and a
+  history table of `GET /tenants/:id/usage`'s `usageRecords`. A fuller
+  version of the snapshot Operations Overview already showed; no new
+  `apps/api` surface was needed.
+- **Account Settings** (`(app)/settings`) — a change-password form
+  (`PATCH /auth/password`, available to every role, matching
+  `AuthController`) and, `tenant_owner`-only, a clinic details form
+  (legal name, tenant status) against `GET`/`PATCH /tenants/:id`.
+
+Verified end-to-end in `tests/e2e/account-management.spec.ts`: adding,
+editing (role plus a location assignment), and disabling a user; the
+usage screen showing a seeded subscription and usage record; changing
+the signed-in user's own password and confirming a second sign-in with
+the *new* password still works later in the same file; updating the
+clinic's legal name; and an `@axe-core/playwright` scan (zero violations)
+of all three screens.
+
+Running the full e2e suite in one invocation pushes the total number of
+real logins comfortably past A3.5's address-level rate limit (10 attempts
+per 15 minutes) — correct behavior for the limiter, not a product bug,
+since every spec file in this sandbox signs in from the same loopback
+address. Each spec file's `beforeAll` now resets that one Redis counter
+for itself (`tests/e2e/reset-rate-limit.ts`), so the suite is independent
+of run order and of how many other files already ran; it never touches
+the per-account counter, so a real brute-force attempt against one
+account is still throttled exactly as before.
+
 ## Not yet built
 
-The remaining screens (Tenant User Management, Usage And Billing
-Summary, Account Settings), and the full accessibility/performance
-verification pass across every screen (A12.3, A12.5, A12.6, A12.8) —
-tracked as the remaining Module 12 build steps.
+The full accessibility/performance verification pass across every
+screen (A12.3, A12.5, A12.6, A12.8) — tracked as the remaining Module 12
+build step.

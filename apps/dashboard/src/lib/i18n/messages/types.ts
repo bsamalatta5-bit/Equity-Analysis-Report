@@ -233,4 +233,55 @@ export interface Messages {
     providerReferenceLabel: string;
     noPhoneNumbers: string;
   };
+  users: {
+    title: string;
+    addButton: string;
+    addTitle: string;
+    emailLabel: string;
+    roleLabel: string;
+    locationsLabel: string;
+    saveButton: string;
+    editButton: string;
+    disableButton: string;
+    noUsers: string;
+    statusLabel: string;
+    roleTenantOwner: string;
+    roleLocationManager: string;
+    roleFrontDeskUser: string;
+    rolePlatformOperator: string;
+    statusActive: string;
+    statusDisabled: string;
+    statusPendingTotpEnrollment: string;
+    temporaryPasswordNotice: string;
+    temporaryPasswordLabel: string;
+  };
+  usage: {
+    title: string;
+    subscriptionTitle: string;
+    planLabel: string;
+    subscriptionStatusLabel: string;
+    includedMinutesLabel: string;
+    spendCapLabel: string;
+    spendCapNone: string;
+    historyTitle: string;
+    periodLabel: string;
+    billableMinutesLabel: string;
+    overageMinutesLabel: string;
+    noUsageRecords: string;
+    noSubscription: string;
+  };
+  settings: {
+    title: string;
+    changePasswordTitle: string;
+    currentPasswordLabel: string;
+    newPasswordLabel: string;
+    changePasswordButton: string;
+    changePasswordSuccess: string;
+    tenantDetailsTitle: string;
+    legalNameLabel: string;
+    tenantStatusLabel: string;
+    saveButton: string;
+    saveSuccess: string;
+    roleLabel: string;
+  };
 }

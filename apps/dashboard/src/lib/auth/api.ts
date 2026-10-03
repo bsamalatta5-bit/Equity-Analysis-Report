@@ -36,3 +36,7 @@ export function confirmTotpEnrollment(challengeToken: string, code: string): Pro
 export function logout(): Promise<{ status: "ok" }> {
   return apiFetch("/auth/logout", { method: "POST" });
 }
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ status: "ok" }> {
+  return apiFetch("/auth/password", { method: "PATCH", body: { currentPassword, newPassword } });
+}

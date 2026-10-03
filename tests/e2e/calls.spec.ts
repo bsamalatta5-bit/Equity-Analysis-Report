@@ -4,6 +4,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { PrismaClient } from "@prisma/client";
 import * as argon2 from "argon2";
 import { authenticator } from "otplib";
+import { resetAuthRateLimit } from "./reset-rate-limit";
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env["DATABASE_MIGRATOR_URL"]! } },
@@ -100,6 +101,7 @@ test.describe("Call log and call detail (Module 12)", () => {
   let fixture: Fixture;
 
   test.beforeAll(async () => {
+    await resetAuthRateLimit("127.0.0.1");
     fixture = await seedFixture();
   });
 

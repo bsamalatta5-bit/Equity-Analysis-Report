@@ -11,10 +11,12 @@ import { useCurrentSession } from "../../../lib/auth/session-context";
 import { logout } from "../../../lib/auth/api";
 import { SESSION_QUERY_KEY } from "../../../lib/auth/use-session";
 import { Button } from "../../../components/ui/Button";
+import type { UserRole } from "@voice-receptionist/shared";
 
 interface NavItem {
   href: string;
   labelKey: MessagePath;
+  roles?: readonly UserRole[];
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
@@ -26,6 +28,9 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/staff", labelKey: "nav.staff" },
   { href: "/escalation-rules", labelKey: "nav.escalationRules" },
   { href: "/locations", labelKey: "nav.locations" },
+  { href: "/users", labelKey: "nav.users", roles: ["tenant_owner", "platform_operator"] },
+  { href: "/usage", labelKey: "nav.usage", roles: ["tenant_owner", "platform_operator"] },
+  { href: "/settings", labelKey: "nav.settings" },
 ];
 
 export function AppShell({ locale, children }: { locale: Locale; children: ReactNode }) {
@@ -35,6 +40,7 @@ export function AppShell({ locale, children }: { locale: Locale; children: React
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(session.role));
 
   const onSignOut = async () => {
     setIsSigningOut(true);
@@ -52,7 +58,7 @@ export function AppShell({ locale, children }: { locale: Locale; children: React
         aria-label={t("common.mainNavigationLabel")}
         className="flex w-56 flex-col gap-token-1 border-e border-border bg-surface-raised p-token-4"
       >
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const href = `/${locale}${item.href}`;
           const isActive = pathname === href;
           return (

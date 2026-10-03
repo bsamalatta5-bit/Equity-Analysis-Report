@@ -4,12 +4,17 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { authenticator } from "otplib";
 import { FIXTURE_PATH, type E2eFixture } from "./global-setup";
+import { resetAuthRateLimit } from "./reset-rate-limit";
 
 function loadFixture(): E2eFixture {
   return JSON.parse(readFileSync(FIXTURE_PATH, "utf-8")) as E2eFixture;
 }
 
 test.describe("Sign-in and second-factor verification (Module 12)", () => {
+  test.beforeAll(async () => {
+    await resetAuthRateLimit("127.0.0.1");
+  });
+
   test("a user with no TOTP requirement signs in directly and can sign out", async ({ page }) => {
     const fixture = loadFixture();
     await page.goto("/en/sign-in");

@@ -54,6 +54,23 @@ export class TenantsService {
   }
 
   /**
+   * `listUsers` omits location assignments (not needed by its callers).
+   * The dashboard's edit-user form needs them to pre-populate its location
+   * checkboxes — `updateUser`'s `locationIds` replaces the full assignment
+   * set, so submitting without first knowing the current set would silently
+   * wipe it.
+   */
+  async getUser(tx: Prisma.TransactionClient, tenantId: string, userId: string) {
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    if (!user || user.tenantId !== tenantId) {
+      throw new NotFoundError("User", userId);
+    }
+    const userLocations = await tx.userLocation.findMany({ where: { userId }, select: { locationId: true } });
+    const { passwordHash: _passwordHash, totpSecret: _totpSecret, ...rest } = user;
+    return { ...rest, locationIds: userLocations.map((row) => row.locationId) };
+  }
+
+  /**
    * No invitation channel exists in this build (Section 1 excludes
    * WhatsApp/SMS, and email delivery was never in scope for Modules 1-4).
    * A random temporary password is generated and returned once in the

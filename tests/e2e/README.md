@@ -67,10 +67,30 @@ after Zod validation already ran), so the dashboard's own client was
 sending an incomplete body and getting a 400 on every attempt — fixed in
 `src/lib/availability/api.ts`, not worked around in the test.
 
-The remaining screens' (Tenant User Management, Usage And Billing
-Summary, Account Settings) accessibility proof is covered by the
-Module 12 accessibility/performance verification pass once every screen
-exists.
+`account-management.spec.ts` seeds its own `tenant_owner` (with a
+subscription and one usage record, so the usage screen has real history
+to show) and drives: adding a user and dismissing the one-time temporary
+password notice, editing that user's role and assigning it to the
+seeded location, disabling it; the usage screen showing the seeded
+subscription and usage record; changing the signed-in owner's own
+password through the real `PATCH /auth/password` and confirming the
+*new* password signs in in this same file's later tests (it mutates its
+own in-memory fixture after the change, since the real row changed);
+updating the clinic's legal name; and an `@axe-core/playwright` scan of
+all three screens. This is also the file that exercises `GET
+/tenants/:id/users/:userId` — added because `listUsers` never selected
+`UserLocation` rows, so there was no way for an edit form to know which
+locations a user already had before overwriting them.
+
+Running every spec file in one `playwright test` invocation pushes the
+total number of real logins well past A3.5's per-address rate limit (10
+attempts per 15 minutes), since every file in this sandbox signs in from
+the same loopback address — the limiter doing its job, not a bug. Each
+file's `beforeAll` resets that one Redis counter for itself
+(`reset-rate-limit.ts`, a ~15-line raw socket client rather than a new
+Redis dependency for one `DEL`), so the full suite passes regardless of
+file order; it never touches the per-account counter, so this changes
+nothing about how a real brute-force attempt is throttled.
 
 Chromium's `old` headless mode was removed from the version this sandbox
 has preinstalled, hence `PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1` and
