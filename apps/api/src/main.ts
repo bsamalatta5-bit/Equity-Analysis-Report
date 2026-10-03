@@ -2,10 +2,10 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import cookieParser from "cookie-parser";
-import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { createLogger } from "@voice-receptionist/logger";
 import { AppModule } from "./app.module";
+import { applySecurityHeaders } from "./security";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -14,7 +14,7 @@ async function bootstrap(): Promise<void> {
   const httpLogger = createLogger({ serviceName: "api" });
   app.use(pinoHttp({ logger: httpLogger }));
 
-  app.use(helmet());
+  applySecurityHeaders(app);
   app.use(cookieParser());
 
   app.enableCors({

@@ -2,15 +2,22 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { I18nProvider } from "../../lib/i18n/provider";
-import { isLocale, LOCALES, dirFor, type Locale } from "../../lib/i18n/locales";
+import { isLocale, dirFor, type Locale } from "../../lib/i18n/locales";
 import { QueryProvider } from "../../lib/query-provider";
 import { ar } from "../../lib/i18n/messages/ar";
 import { en } from "../../lib/i18n/messages/en";
 import "../../styles/globals.css";
 
-export function generateStaticParams() {
-  return LOCALES.map((locale) => ({ locale }));
-}
+/**
+ * A13.7: every script tag Next.js injects for hydration must carry the
+ * same per-request nonce `middleware.ts` put on this response's CSP
+ * header, so this route tree cannot be statically prerendered — a nonce
+ * baked in at build time would never match a fresh one generated on the
+ * next real request. `generateStaticParams` is deliberately not exported
+ * here for the same reason (it exists specifically to tell Next which
+ * param combinations to prerender at build time).
+ */
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,

@@ -8,6 +8,7 @@ import Redis from "ioredis";
 import { authenticator } from "otplib";
 import request from "supertest";
 import { AppModule } from "../../apps/api/src/app.module";
+import { applySecurityHeaders } from "../../apps/api/src/security";
 
 /** Bypasses RLS entirely (migrator/superuser) — test setup and assertions only, never app code. */
 export const migratorPrisma = new PrismaClient({
@@ -37,6 +38,7 @@ export async function resetAuthRateLimits(): Promise<void> {
 export async function bootstrapApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   const app = moduleRef.createNestApplication();
+  applySecurityHeaders(app);
   app.use(cookieParser());
   await app.init();
   return app;
@@ -64,9 +66,7 @@ export interface TestTenantFixture {
 }
 
 /** Builds one fully-formed tenant per call (unique ids/emails), suitable for parallel-safe reuse within a file. */
-export async function createTestTenant(
-  userSpecs: Record<string, TestUserSpec>,
-): Promise<TestTenantFixture> {
+export async function createTestTenant(userSpecs: Record<string, TestUserSpec>): Promise<TestTenantFixture> {
   const suffix = randomUUID().slice(0, 8);
 
   const tenant = await migratorPrisma.tenant.create({
