@@ -74,13 +74,33 @@ password notice, editing that user's role and assigning it to the
 seeded location, disabling it; the usage screen showing the seeded
 subscription and usage record; changing the signed-in owner's own
 password through the real `PATCH /auth/password` and confirming the
-*new* password signs in in this same file's later tests (it mutates its
+_new_ password signs in in this same file's later tests (it mutates its
 own in-memory fixture after the change, since the real row changed);
 updating the clinic's legal name; and an `@axe-core/playwright` scan of
 all three screens. This is also the file that exercises `GET
 /tenants/:id/users/:userId` — added because `listUsers` never selected
 `UserLocation` rows, so there was no way for an edit form to know which
 locations a user already had before overwriting them.
+
+`accessibility-sweep.spec.ts` is Module 12 part 6's systematic A12.3
+sweep: one tenant seeded with a location, service, staff member,
+appointment, and call-with-transcript, scanned across all 17 screens in
+both `en` and `ar` (34 `@axe-core/playwright` scans, zero violations) —
+the systematic pass the screen-by-screen parts above built up only in
+English. The sign-in and `mode=verify` second-factor screens are scanned
+separately since reaching them doesn't require the rest of the fixture;
+`mode=verify` (as opposed to `mode=enroll`) renders without calling any
+API on load, so viewing it in both languages never consumes the
+challenge token.
+
+`web-vitals.spec.ts` is Module 12 part 6's A12.6 pass: it injects
+Google's real `web-vitals` library via `page.addInitScript` (so the
+observers are registered before any page script runs, not after) and
+measures real LCP/CLS on the sign-in, operations overview, and calendar
+screens, plus real INP after a trusted click navigating to the calendar
+— all within the standard Core Web Vitals "good" thresholds. See
+`docs/accessibility/verification.md` for the full A12.3/A12.5/A12.6/A12.8
+write-up, including what automated tooling in this file cannot prove.
 
 Running every spec file in one `playwright test` invocation pushes the
 total number of real logins well past A3.5's per-address rate limit (10

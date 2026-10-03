@@ -188,7 +188,7 @@ scan (zero violations) of all five screens.
   `tenant_owner`/`platform_operator` matching `TenantsController`'s own
   RBAC; add/edit/disable is `tenant_owner`-only) — list, an add form
   (email, role, assigned locations), and an inline edit form per user.
-  There was previously no way to see a user's *current* location
+  There was previously no way to see a user's _current_ location
   assignments at all (`listUsers` never selected them, since no caller
   needed them); `updateUser` replaces the full assignment set whenever
   `locationIds` is present in the request, so an edit form that couldn't
@@ -216,7 +216,7 @@ Verified end-to-end in `tests/e2e/account-management.spec.ts`: adding,
 editing (role plus a location assignment), and disabling a user; the
 usage screen showing a seeded subscription and usage record; changing
 the signed-in user's own password and confirming a second sign-in with
-the *new* password still works later in the same file; updating the
+the _new_ password still works later in the same file; updating the
 clinic's legal name; and an `@axe-core/playwright` scan (zero violations)
 of all three screens.
 
@@ -230,8 +230,32 @@ of run order and of how many other files already ran; it never touches
 the per-account counter, so a real brute-force attempt against one
 account is still throttled exactly as before.
 
+### Accessibility and performance verification
+
+- **A12.3** — `tests/e2e/accessibility-sweep.spec.ts` scans all 17 screens
+  in both `en` and `ar` (34 scans) with `@axe-core/playwright`, zero
+  violations, seeding one tenant with a location/service/staff
+  member/appointment/call so the two id-addressed detail screens are
+  reachable too.
+- **A12.5** — `scripts/check-bundle-size.mjs` (`pnpm run
+test:bundle-size`) gzips every chunk a route's own
+  `app-build-manifest.json` entry references — the same data Next.js's
+  build output is generated from — and fails above 200KB per route.
+  Currently the largest route (the calendar) is at 130KB, 65% of budget.
+- **A12.6** — `tests/e2e/web-vitals.spec.ts` injects Google's real
+  `web-vitals` library (not a hand-rolled approximation) before page load
+  and measures LCP/CLS/INP against the standard "good" thresholds on the
+  sign-in, operations overview, and calendar screens.
+- **A12.8** — `docs/accessibility/verification.md` is a written,
+  self-reviewed checklist (not a fabricated human sign-off) covering what
+  the automated scans above do and do not prove, plus a direct code review
+  of keyboard operability, focus visibility, the skip link, document
+  language/direction, and touch target size.
+
 ## Not yet built
 
-The full accessibility/performance verification pass across every
-screen (A12.3, A12.5, A12.6, A12.8) — tracked as the remaining Module 12
-build step.
+Nothing — every Module 12 screen and verification step above is built.
+`docs/accessibility/verification.md` documents, item by item, what
+remains unverified by a human auditor or real assistive-technology user
+(screen reader announcement phrasing, 200% zoom reflow) rather than
+claiming full WCAG 2.2 AA conformance from automated tooling alone.

@@ -27,7 +27,8 @@ export function SettingsView() {
 
       <Card className="max-w-xl">
         <p className="text-sm text-text-secondary">
-          {t("settings.roleLabel")}: <span className="font-medium text-text-primary">{t(ROLE_LABEL_KEYS[session.role])}</span>
+          {t("settings.roleLabel")}:{" "}
+          <span className="font-medium text-text-primary">{t(ROLE_LABEL_KEYS[session.role])}</span>
         </p>
       </Card>
 
@@ -137,13 +138,7 @@ function TenantDetailsForm({ tenantId }: { tenantId: string }) {
   );
 }
 
-function TenantDetailsEditForm({
-  tenantId,
-  initial,
-}: {
-  tenantId: string;
-  initial: TenantDetailsValues;
-}) {
+function TenantDetailsEditForm({ tenantId, initial }: { tenantId: string; initial: TenantDetailsValues }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);

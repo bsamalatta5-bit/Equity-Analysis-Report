@@ -183,7 +183,11 @@ function EditUserCard({
         isLoading={locationsQuery.isLoading || userQuery.isLoading}
         isError={locationsQuery.isError || userQuery.isError}
         error={locationsQuery.error ?? userQuery.error}
-        data={locationsQuery.data && userQuery.data ? { locations: locationsQuery.data, user: userQuery.data } : undefined}
+        data={
+          locationsQuery.data && userQuery.data
+            ? { locations: locationsQuery.data, user: userQuery.data }
+            : undefined
+        }
         isEmpty={() => false}
         onRetry={() => {
           void locationsQuery.refetch();
@@ -268,11 +272,7 @@ function UserForm({
       <form className="flex flex-col gap-token-4" onSubmit={submit} noValidate>
         <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
         {!initial ? (
-          <TextField
-            label={t("users.emailLabel")}
-            type="email"
-            {...register("email", { required: true })}
-          />
+          <TextField label={t("users.emailLabel")} type="email" {...register("email", { required: true })} />
         ) : null}
         <label className="flex flex-col gap-token-1 text-sm">
           <span className="font-medium text-text-primary">{t("users.roleLabel")}</span>

@@ -250,7 +250,8 @@ export const ar = {
     statusActive: "نشط",
     statusDisabled: "معطّل",
     statusPendingTotpEnrollment: "بانتظار تفعيل التحقق بخطوتين",
-    temporaryPasswordNotice: "شارك كلمة المرور المؤقتة هذه مع المستخدم الجديد خارج النظام — لن تُعرض مرة أخرى.",
+    temporaryPasswordNotice:
+      "شارك كلمة المرور المؤقتة هذه مع المستخدم الجديد خارج النظام — لن تُعرض مرة أخرى.",
     temporaryPasswordLabel: "كلمة المرور المؤقتة",
   },
   usage: {
