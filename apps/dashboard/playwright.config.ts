@@ -23,7 +23,17 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], launchOptions: { executablePath: "/opt/pw-browsers/chromium" } },
+      use: {
+        ...devices["Desktop Chrome"],
+        // Only this build sandbox's preinstalled Chromium revision needs an
+        // explicit path (it predates the pinned @playwright/test version's
+        // expected revision — see tests/e2e/README.md). A real CI run or
+        // local dev machine with `playwright install` leaves this unset and
+        // gets the browser Playwright itself manages.
+        launchOptions: process.env["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"]
+          ? { executablePath: process.env["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"] }
+          : {},
+      },
     },
   ],
   webServer: [

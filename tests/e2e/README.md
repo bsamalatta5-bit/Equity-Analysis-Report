@@ -12,6 +12,10 @@ auto-loads `.env` under `pnpm --filter ... exec`):
 ```
 set -a && source .env && set +a
 export DASHBOARD_ORIGIN=http://localhost:3000 DASHBOARD_BASE_URL=http://localhost:3000 API_BASE_URL=http://localhost:3001
+# Only needed on this build sandbox's preinstalled Chromium revision — see
+# the note at the bottom of this file. A real CI run or a dev machine with
+# `playwright install` needs neither of the next two lines.
+export PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium
 pnpm --filter dashboard exec playwright test
 ```
 
@@ -114,8 +118,9 @@ nothing about how a real brute-force attempt is throttled.
 
 Chromium's `old` headless mode was removed from the version this sandbox
 has preinstalled, hence `PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1` and
-`launchOptions.executablePath` pointing at `/opt/pw-browsers/chromium` in
-`apps/dashboard/playwright.config.ts` — both needed only because the
-pinned `@playwright/test` version (1.48.2) predates that browser revision;
-a real deployment target with a matching Playwright-managed browser
-install needs neither.
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` (read by
+`apps/dashboard/playwright.config.ts`, only when set) — both needed only
+because the pinned `@playwright/test` version (1.48.2) predates that
+browser revision. CI (`.github/workflows/ci.yml`) runs `playwright
+install --with-deps chromium` instead and leaves both unset, getting the
+browser revision Playwright itself manages.

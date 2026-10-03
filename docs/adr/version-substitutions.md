@@ -13,6 +13,55 @@ the running environment differed from Section 3's exact pin, and why.
 | Node.js                       | 22.11.0 | 22.22.2       | The build session's sandbox ships Node 22.22.2 system-wide; no version manager (nvm) with 22.11.0 available to install. Both are Node 22 LTS; no API used here is version-sensitive between them. `.nvmrc` and `package.json#engines` still declare `22.11.0` as the source of truth for real deployments — `nvm install && nvm use` per Section 8 will get the exact pin there.                                                                                                                                                                                                                                                                                                                                                |
 | pgvector (Postgres extension) | 0.8.0   | 0.6.0         | The sandbox has no Docker daemon (see below), so `docker-compose.yml`'s `pgvector/pgvector:pg16` image — which should carry a current pgvector — could not be used to verify this session's changes locally. Postgres was installed natively instead, and `postgresql-16-pgvector` (Ubuntu apt) resolved to 0.6.0, the version in that distribution's repository at build time. `docker-compose.yml` itself still points at the `pgvector/pgvector:pg16` image; whatever version that tag resolves to at deploy time should be verified against 0.8.0 when Docker is available (the ivfflat index and vector column syntax used in migrations are stable across both versions, so this is not expected to be a functional gap). |
 
+## Security-motivated version bumps (Module 13, A13.2's `pnpm audit` gate)
+
+Running `pnpm audit` for the first time in Module 13 surfaced real
+findings against the exact pins below, including four **critical**
+advisories in `next@15.0.3` (RCE in the React Flight protocol, a
+middleware authorization bypass, a Windows RCE, and an Image Optimization
+API RCE). Section 3 pins exact versions and prohibits silently resolving
+conflicts with `--force`/`--legacy-peer-deps`, but shipping known-critical
+RCEs because a version happens to be pinned is a worse outcome than
+documenting a patch-level bump here — so these were bumped, each fully
+re-verified (full typecheck/lint/build, all 104 integration tests, all 7
+isolation tests, and the full 24-test e2e suite against a real browser),
+not just changed and assumed safe:
+
+| Package                                    | Pinned  | Bumped to                          | Why                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| next                                       | 15.0.3  | 15.5.27                            | Clears all four critical advisories above (fixed across 15.0.5/15.2.3/15.5.24). Same major/minor-stable line; full dashboard build, bundle-size budget, and the entire e2e suite (including the new CSP/nonce work, which depends on Next's own dynamic-rendering behavior) re-verified against it with no regressions. |
+| ws (apps/voice-gateway)                    | 8.18.0  | 8.22.0                             | High-severity memory-exhaustion DoS (small-fragment/tiny-data-frame flood), patched >=8.21.0. This is the real-time media WebSocket server (`apps/voice-gateway/src/main.ts`'s `/media` endpoint) — directly network-facing, so this one isn't a dev-tooling-only concern like most of the rest of this list.           |
+| lodash (transitive, via `@nestjs/config`)  | 4.17.21 | 4.18.1 (via root `pnpm.overrides`) | Code-injection advisory in `_.template`, patched >=4.18.0. A same-major patch bump of a transitive dependency, not a direct Section 3 pin; `pnpm.overrides` (not `--force`/`--legacy-peer-deps`) is the standard, conflict-safe way to apply it.                                                                        |
+| path-to-regexp (transitive, via `express`) | 0.1.10  | 0.1.13 (via root `pnpm.overrides`) | Two ReDoS advisories in the 0.1.x line, patched >=0.1.12 and >=0.1.13 respectively. Same reasoning as `lodash` above.                                                                                                                                                                                                   |
+
+**`@playwright/test` was deliberately left at the pinned 1.48.2**, even
+though `pnpm audit` flags a high-severity "downloads browsers without
+checksum verification" advisory (patched >=1.55.1) and `next@15.5.27`
+emits a peer-dependency warning wanting `^1.51.1`. Bumping it was
+attempted: `next` upgraded cleanly to it, but the newer version's expected
+Chromium revision could not be downloaded in this sandbox (`cdn.
+playwright.dev` is not on this environment's network allowlist — the same
+category of restriction documented in `delivery-infrastructure.md` for
+Semgrep's registry and Trivy's vulnerability DB), so the entire e2e suite
+could not be run against it. Shipping an unverified test-tooling bump that
+breaks 20+ real browser tests is a worse outcome than a documented,
+unresolved advisory in a dev dependency that only matters at `playwright
+install` time, not at runtime. The peer-dependency warning is harmless
+(pnpm does not enforce peer ranges by default) and does not affect the
+application's actual behavior.
+
+**Left as documented, accepted findings** (not bumped): `multer`
+(transitive, via `@nestjs/platform-express@10.4.4`) has three
+Denial-of-Service advisories, patched only in multer's 2.x line — a major
+rewrite that isn't safe to force onto a pinned NestJS version without
+upstream NestJS support, and this app never wires a `FileInterceptor`/
+`@UploadedFile` anywhere (`apps/api/src` has no multipart upload endpoint
+at all), so the vulnerable code path is unreachable in practice. `postcss`
+(bundled inside `next@15.5.27` itself, not a separate pin this repo
+controls) has two file-read/path-traversal advisories; Next bundles its
+own PostCSS internally for its CSS pipeline, and overriding it separately
+risks breaking that pipeline for a version Next itself hasn't adopted yet.
+
 ## Tooling not pinned by Section 3 but required to make the pinned stack work
 
 Section 3 pins application/runtime dependencies but not every dev-tooling

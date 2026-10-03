@@ -1,11 +1,5 @@
 name: CI
 
-# Scope note: this workflow currently gates the parts of the platform built
-# so far (Modules 1-4: foundation, auth, scheduling domain, and the dialect
-# feasibility probe harness). Semgrep, Trivy, npm audit, and the staging/
-# production deploy workflows are added in Module 13 (Delivery
-# Infrastructure) per docs/adr/version-substitutions.md.
-
 on:
   push:
     branches: [main]
@@ -18,13 +12,22 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: voice_app
+          # The real superuser, matching docker-compose.yml's local setup —
+          # NOT the application role. A least-privileged `voice_app` role is
+          # created separately below, same as infra/scripts/init-db.local.sql
+          # does for local dev (GitHub Actions service containers can't mount
+          # a docker-entrypoint-initdb.d script, so the equivalent SQL runs as
+          # an explicit step instead). Using the superuser as the application
+          # role here would make every row-level-security test in
+          # tests/isolation pass vacuously — a superuser bypasses RLS
+          # entirely, so it would never catch a real RLS regression.
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: local-dev-only
           POSTGRES_DB: voice_receptionist
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U voice_app -d voice_receptionist"
+          --health-cmd "pg_isready -U postgres -d voice_receptionist"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -38,9 +41,49 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://voice_app:local-dev-only@localhost:5432/voice_receptionist
-      REDIS_URL: redis://localhost:6379
       NODE_ENV: test
+      DATABASE_URL: postgresql://voice_app:local-dev-only@localhost:5432/voice_receptionist
+      DATABASE_MIGRATOR_URL: postgresql://postgres:local-dev-only@localhost:5432/voice_receptionist
+      DATABASE_APPLICATION_ROLE: voice_app
+      REDIS_URL: redis://localhost:6379
+      API_PORT: 3001
+      API_BASE_URL: http://localhost:3001
+      COOKIE_DOMAIN: localhost
+      SESSION_COOKIE_NAME: __Host-session
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      REFRESH_TOKEN_TTL_SECONDS: 604800
+      # Every value below is a CI-only ephemeral placeholder, not a real
+      # credential — Section 13.3's managed-secret-store requirement governs
+      # real deployments (see docs/secrets.md), not this throwaway test run.
+      CSRF_SECRET: ci-only-placeholder-csrf-secret-value
+      ARGON2_MEMORY_COST_KIB: 19456
+      ARGON2_TIME_COST: 2
+      ARGON2_PARALLELISM: 1
+      TOTP_ISSUER: "Voice Receptionist"
+      VOICE_GATEWAY_PORT: 3002
+      VOICE_GATEWAY_SERVICE_TOKEN: ci-only-placeholder-service-token
+      SPEECH_RECOGNITION_PROVIDER: fixture
+      SPEECH_SYNTHESIS_PROVIDER: fixture
+      LANGUAGE_MODEL_PROVIDER: fixture
+      TELEPHONY_PROVIDER: fixture
+      SPEECH_RECOGNITION_API_KEY: ci-only-placeholder
+      SPEECH_SYNTHESIS_API_KEY: ci-only-placeholder
+      LANGUAGE_MODEL_API_KEY: ci-only-placeholder
+      TELEPHONY_API_KEY: ci-only-placeholder
+      TELEPHONY_WEBHOOK_SIGNING_SECRET: ci-only-placeholder
+      NEXT_PUBLIC_API_ORIGIN: http://localhost:3001
+      NEXT_PUBLIC_RECORDING_ORIGIN: http://localhost:3001
+      RECORDING_BUCKET: ci-only-placeholder-bucket
+      RECORDING_STORAGE_DIR: ./var/recordings
+      RECORDING_SIGNED_URL_TTL_SECONDS: 300
+      # A real 32-byte base64 AES-256-GCM key — fine to be public, since it
+      # only ever encrypts throwaway recordings created and destroyed within
+      # this one CI run.
+      RECORDING_ENCRYPTION_KEY: qREEsStBMrJFvb5/8lAt0njtjKQoCBsdt+5LNd5FtKc=
+      RECORDING_SIGNING_SECRET: ci-only-placeholder-recording-signing-secret
+      CLOUD_REGION: me-central-saudi-arabia
+      DASHBOARD_ORIGIN: http://localhost:3000
+      DASHBOARD_BASE_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +98,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Create the least-privileged application database role
+        run: |
+          PGPASSWORD=local-dev-only psql -h localhost -U postgres -d voice_receptionist -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'voice_app') THEN
+                CREATE ROLE voice_app LOGIN PASSWORD 'local-dev-only';
+              END IF;
+            END
+            $$;
+            GRANT CONNECT ON DATABASE voice_receptionist TO voice_app;
+          SQL
 
       - name: Lint
         run: pnpm lint
@@ -76,3 +132,41 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Dashboard bundle-size budget (A12.5)
+        run: pnpm --filter dashboard run test:bundle-size
+
+      - name: Install Playwright's Chromium
+        run: pnpm --filter dashboard exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      # ---- Module 13 (Delivery Infrastructure) security gates ----
+
+      - name: npm audit (production dependencies, critical only)
+        # High-severity findings exist today against exact Section 3 pins
+        # this workflow cannot unilaterally change (see
+        # docs/adr/version-substitutions.md's "Security-motivated version
+        # bumps" section for what was and wasn't safe to bump, and why) —
+        # gating on "high" would make this permanently red for reasons
+        # outside a single PR's control. Gating on "critical" still catches
+        # the worst class of finding (the four Next.js RCEs this session
+        # found and fixed came in at critical).
+        run: pnpm audit --prod --audit-level=critical
+
+      - name: Install Semgrep
+        run: pip install semgrep==1.95.0
+
+      - name: Semgrep static analysis
+        run: semgrep scan --config=p/ci --config=p/owasp-top-ten --error
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.56.2
+
+      - name: Trivy filesystem vulnerability scan
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed .
+
+      - name: Trivy secret scan
+        run: trivy fs --scanners secret --exit-code 1 .

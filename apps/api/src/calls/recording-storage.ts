@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { loadBase64Secret, loadSecret } from "@voice-receptionist/shared";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -24,19 +25,11 @@ export interface RecordingStorageConfig {
 }
 
 export function loadRecordingStorageConfig(env: NodeJS.ProcessEnv = process.env): RecordingStorageConfig {
-  const encryptionKeyBase64 = env["RECORDING_ENCRYPTION_KEY"];
-  const signingSecret = env["RECORDING_SIGNING_SECRET"];
-  if (!encryptionKeyBase64) {
-    throw new Error("RECORDING_ENCRYPTION_KEY is not set.");
-  }
-  if (!signingSecret) {
-    throw new Error("RECORDING_SIGNING_SECRET is not set.");
-  }
-  const encryptionKey = Buffer.from(encryptionKeyBase64, "base64");
-  if (encryptionKey.length !== 32) {
-    throw new Error("RECORDING_ENCRYPTION_KEY must base64-decode to exactly 32 bytes (AES-256).");
-  }
-  return { storageDir: env["RECORDING_STORAGE_DIR"] ?? "./var/recordings", encryptionKey, signingSecret };
+  return {
+    storageDir: env["RECORDING_STORAGE_DIR"] ?? "./var/recordings",
+    encryptionKey: loadBase64Secret("RECORDING_ENCRYPTION_KEY", 32, env),
+    signingSecret: loadSecret("RECORDING_SIGNING_SECRET", env),
+  };
 }
 
 function assertSafeObjectKey(objectKey: string): void {
